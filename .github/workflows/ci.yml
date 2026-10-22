@@ -48,7 +48,7 @@ jobs:
           # Runs on any x86-64 server CPU since ~2009.
           - target_cpu: x86-64-v2
             suffix: ""
-          # AVX2 and FMA (Intel Haswell, AMD Excavator and newer); inference is ~25% faster.
+          # AVX2 and FMA (Intel Haswell, AMD Excavator and newer).
           - target_cpu: x86-64-v3
             suffix: -avx2
     steps:

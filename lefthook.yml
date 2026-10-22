@@ -1,0 +1,17 @@
+# Git hooks (https://lefthook.dev). Enable with "lefthook install", skip once with "LEFTHOOK=0" environment variable.
+
+pre-commit:
+  jobs:
+    # Reformatted staged files are added to the commit.
+    - name: fmt
+      glob: "*.rs"
+      run: cargo fmt --all
+      stage_fixed: true
+    - name: clippy
+      glob: ["*.rs", "Cargo.toml", "Cargo.lock", "clippy.toml", "*.json", "*.h", "*.html"]
+      run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+pre-push:
+  jobs:
+    - name: test
+      run: cargo test --workspace --locked
