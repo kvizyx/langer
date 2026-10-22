@@ -1,0 +1,30 @@
+# Third-party files in vendor/, pinned to exact upstream versions and verified by sha256 on
+# download. Run `vendir sync` in this directory after changing it; see README.md.
+apiVersion: vendir.k14s.io/v1alpha1
+kind: Config
+minimumRequiredVersion: 0.46.0
+directories:
+- path: vendor
+  contents:
+  # MediaPipe's language detector model, float32 version 1 (the only published version).
+  - path: model
+    http:
+      url: https://storage.googleapis.com/mediapipe-models/language_detector/language_detector/float32/1/language_detector.tflite
+      sha256: 7db4f23dfe1ad8966b050b419a865da451143fd43eb6b606a256aadeeb1e5417
+      # The model is a zip archive too (labels.txt is appended); keep the file as is.
+      disableUnpack: true
+  # Plan 9 character tables of MediaPipe's NGramHash op, at commit 998a5d77.
+  - path: mediapipe
+    http:
+      url: https://raw.githubusercontent.com/google-ai-edge/mediapipe/998a5d77bb3d0e06211b6e9cc1fd6094e6051bfb/mediapipe/tasks/cc/text/language_detector/custom_ops/utils/utf/runetypebody.h
+      sha256: afa20606a1af845aac276585043cf1f5f862bb909cfd28cb9946dc36f54d5829
+  # TFLite flatbuffer schema, at TensorFlow commit 048b2af2.
+  - path: tflite
+    http:
+      url: https://raw.githubusercontent.com/tensorflow/tensorflow/048b2af29e13e6c655cc04e7c1a4f6ae87acf1ec/tensorflow/compiler/mlir/lite/schema/schema.fbs
+      sha256: daaef02b42d0e49dd4bed4de2db71cd8abacb9a4f9c113c36c4950cc7ab80129
+  # License of all files above.
+  - path: license
+    http:
+      url: https://www.apache.org/licenses/LICENSE-2.0.txt
+      sha256: cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30

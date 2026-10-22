@@ -1,0 +1,13 @@
+apiVersion: vendir.k14s.io/v1alpha1
+directories:
+- contents:
+  - http: {}
+    path: model
+  - http: {}
+    path: mediapipe
+  - http: {}
+    path: tflite
+  - http: {}
+    path: license
+  path: vendor
+kind: LockConfig

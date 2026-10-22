@@ -1,0 +1,24 @@
+[package]
+name = "langer_mediapipe"
+description = "Pure Rust inference for MediaPipe's text language detector"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+# Files in vendor/ are Apache-2.0 third-party files, managed with vendir (see README.md).
+
+[dependencies]
+flatbuffers = { workspace = true, features = ["std"] }
+flexbuffers.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+divan.workspace = true
+
+[[bench]]
+name = "predict"
+harness = false
+
+[lints]
+workspace = true

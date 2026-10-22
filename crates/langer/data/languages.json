@@ -1,0 +1,828 @@
+[
+  {
+    "iso_639_1": "af",
+    "name": "Afrikaans",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "am",
+    "name": "Amharic",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "ar",
+    "name": "Arabic",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "az",
+    "name": "Azerbaijani",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "be",
+    "name": "Belarusian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "bg",
+    "name": "Bulgarian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "bn",
+    "name": "Bengali",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "bs",
+    "name": "Bosnian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ca",
+    "name": "Catalan",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ceb",
+    "name": "Cebuano",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "co",
+    "name": "Corsican",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "cs",
+    "name": "Czech",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "cy",
+    "name": "Welsh",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "da",
+    "name": "Danish",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "de",
+    "name": "German",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "el",
+    "name": "Greek",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "en",
+    "name": "English",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "eo",
+    "name": "Esperanto",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "es",
+    "name": "Spanish",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "et",
+    "name": "Estonian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "eu",
+    "name": "Basque",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "fa",
+    "name": "Persian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "fi",
+    "name": "Finnish",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "fr",
+    "name": "French",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "fy",
+    "name": "Frisian",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "ga",
+    "name": "Irish",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "gd",
+    "name": "Scottish Gaelic",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "gl",
+    "name": "Galician",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "gu",
+    "name": "Gujarati",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ha",
+    "name": "Hausa",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "haw",
+    "name": "Hawaiian",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "he",
+    "name": "Hebrew",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "hi",
+    "name": "Hindi",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "hmn",
+    "name": "Hmong",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "hr",
+    "name": "Croatian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ht",
+    "name": "Haitian Creole",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "hu",
+    "name": "Hungarian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "hy",
+    "name": "Armenian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "id",
+    "name": "Indonesian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ig",
+    "name": "Igbo",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "is",
+    "name": "Icelandic",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "it",
+    "name": "Italian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ja",
+    "name": "Japanese",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "jv",
+    "name": "Javanese",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "ka",
+    "name": "Georgian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "kk",
+    "name": "Kazakh",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "km",
+    "name": "Khmer",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "kn",
+    "name": "Kannada",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "ko",
+    "name": "Korean",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ku",
+    "name": "Kurdish",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "ky",
+    "name": "Kyrgyz",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "la",
+    "name": "Latin",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "lb",
+    "name": "Luxembourgish",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "lg",
+    "name": "Luganda",
+    "methods": [
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "lo",
+    "name": "Lao",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "lt",
+    "name": "Lithuanian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "lv",
+    "name": "Latvian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "mg",
+    "name": "Malagasy",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "mi",
+    "name": "Maori",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "mk",
+    "name": "Macedonian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ml",
+    "name": "Malayalam",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "mn",
+    "name": "Mongolian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "mr",
+    "name": "Marathi",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ms",
+    "name": "Malay",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "mt",
+    "name": "Maltese",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "my",
+    "name": "Burmese",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "nb",
+    "name": "Norwegian Bokmal",
+    "methods": [
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ne",
+    "name": "Nepali",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "nl",
+    "name": "Dutch",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "nn",
+    "name": "Norwegian Nynorsk",
+    "methods": [
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "no",
+    "name": "Norwegian",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "ny",
+    "name": "Nyanja",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "pa",
+    "name": "Punjabi",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "pl",
+    "name": "Polish",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ps",
+    "name": "Pashto",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "pt",
+    "name": "Portuguese",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ro",
+    "name": "Romanian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ru",
+    "name": "Russian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "sd",
+    "name": "Sindhi",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "si",
+    "name": "Sinhala",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "sk",
+    "name": "Slovak",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "sl",
+    "name": "Slovenian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "sm",
+    "name": "Samoan",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "sn",
+    "name": "Shona",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "so",
+    "name": "Somali",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "sq",
+    "name": "Albanian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "sr",
+    "name": "Serbian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "st",
+    "name": "Southern Sotho",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "su",
+    "name": "Sundanese",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "sv",
+    "name": "Swedish",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "sw",
+    "name": "Swahili",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ta",
+    "name": "Tamil",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "te",
+    "name": "Telugu",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "tg",
+    "name": "Tajik",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "th",
+    "name": "Thai",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "tl",
+    "name": "Tagalog",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "tn",
+    "name": "Tswana",
+    "methods": [
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "tr",
+    "name": "Turkish",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ts",
+    "name": "Tsonga",
+    "methods": [
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "uk",
+    "name": "Ukrainian",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "ur",
+    "name": "Urdu",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "uz",
+    "name": "Uzbek",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "vi",
+    "name": "Vietnamese",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "xh",
+    "name": "Xhosa",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "yi",
+    "name": "Yiddish",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "iso_639_1": "yo",
+    "name": "Yoruba",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "zh",
+    "name": "Chinese",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  },
+  {
+    "iso_639_1": "zu",
+    "name": "Zulu",
+    "methods": [
+      "mediapipe",
+      "lingua"
+    ]
+  }
+]
