@@ -1,66 +1,127 @@
 //! Behavior of `Detector` with the bundled model.
 
 use langer_mediapipe::Detector;
+use proptest::prelude::*;
+use rstest::rstest;
 
-fn top(detector: &Detector, text: &str) -> String {
-    detector.predict(text, 1)[0].language.to_owned()
-}
+/// Languages of the bundled model and `unknown`.
+const LABELS: usize = 111;
 
 #[test]
-fn bundled_model_knows_110_languages() {
-    let detector = Detector::new();
+fn labels_are_unknown_and_110_languages() {
+    let detector = Detector::new().expect("the bundled model loads");
     let labels: Vec<&str> = detector.labels().collect();
-    assert_eq!(labels.len(), 111);
+    assert_eq!(labels.len(), LABELS);
     assert_eq!(labels[0], "unknown");
-    for code in ["en", "ru", "uk", "de", "ja", "zh", "zh-Latn", "iw", "fil"] {
-        assert!(labels.contains(&code), "{code}");
-    }
 }
 
 #[test]
-fn detects_common_languages() {
-    let detector = Detector::new();
-    let cases = [
-        ("Hello, how are you doing today?", "en"),
-        ("Привет, как у тебя дела сегодня?", "ru"),
-        ("Привіт, як у тебе справи сьогодні?", "uk"),
-        ("Hallo, wie geht es dir heute?", "de"),
-        ("今日はとても良い天気ですね", "ja"),
-        ("Bonjour, comment ça va aujourd'hui ?", "fr"),
-    ];
-    for (text, expected) in cases {
-        assert_eq!(top(&detector, text), expected, "{text}");
-    }
+fn heap_size_is_close_to_the_model_size() {
+    // Weights are kept quantized, as in the ~300 KiB file.
+    let size = Detector::new().expect("the bundled model loads").heap_size();
+    assert!((200 << 10..400 << 10).contains(&size), "{size} bytes");
+}
+
+#[rstest]
+#[case::english("Hello, how are you doing today?", "en")]
+#[case::russian("Привет, как у тебя дела сегодня?", "ru")]
+#[case::ukrainian("Привіт, як у тебе справи сьогодні?", "uk")]
+#[case::german("Hallo, wie geht es dir heute?", "de")]
+#[case::french("Bonjour, comment ça va aujourd'hui ?", "fr")]
+#[case::japanese("今日はとても良い天気ですね", "ja")]
+// MediaPipe's own codes rather than ISO 639-1.
+#[case::hebrew("שלום, מה שלומך היום?", "iw")]
+#[case::romanized_japanese("Kyou wa ii tenki desu ne", "ja-Latn")]
+fn predict_detects_the_language(#[case] text: &str, #[case] expected: &str) {
+    assert_eq!(
+        Detector::new()
+            .expect("the bundled model loads")
+            .predict(text, 1)
+            .expect("prediction succeeds")[0]
+            .language,
+        expected
+    );
 }
 
 #[test]
-fn predictions_are_a_sorted_distribution() {
-    let detector = Detector::new();
-    let all = detector.predict("¿Dónde está la biblioteca?", usize::MAX);
-    assert_eq!(all.len(), 111);
-    assert!(all.windows(2).all(|p| p[0].probability >= p[1].probability));
-    let sum: f32 = all.iter().map(|p| p.probability).sum();
-    assert!((sum - 1.0).abs() < 1e-4, "sum = {sum}");
-    assert_eq!(all[0].language, "es");
+fn predict_ignores_letter_case() {
+    let detector = Detector::new().expect("the bundled model loads");
+    assert_eq!(
+        detector.predict("ПРИВЕТ МИР", 3).expect("prediction succeeds"),
+        detector.predict("привет мир", 3).expect("prediction succeeds")
+    );
+}
+
+#[rstest]
+#[case::empty("")]
+#[case::whitespace(" ")]
+#[case::emoji("😀")]
+fn predict_classifies_texts_without_letters(#[case] text: &str) {
+    // As in MediaPipe: every text gets a prediction, even without a single letter.
+    assert_eq!(
+        Detector::new()
+            .expect("the bundled model loads")
+            .predict(text, 1)
+            .expect("prediction succeeds")
+            .len(),
+        1
+    );
 }
 
 #[test]
-fn case_does_not_matter() {
-    let detector = Detector::new();
-    assert_eq!(detector.predict("ПРИВЕТ МИР", 3), detector.predict("привет мир", 3));
+fn predict_with_zero_k_returns_nothing() {
+    assert!(
+        Detector::new()
+            .expect("the bundled model loads")
+            .predict("hello", 0)
+            .expect("prediction succeeds")
+            .is_empty()
+    );
 }
 
 #[test]
-fn empty_input_or_zero_k_has_no_predictions() {
-    let detector = Detector::new();
-    assert!(detector.predict("", 1).is_empty());
-    assert!(detector.predict("hello", 0).is_empty());
-    // Whitespace is valid input, as in MediaPipe.
-    assert_eq!(detector.predict(" ", 1).len(), 1);
-}
-
-#[test]
-fn rejects_data_that_is_not_the_model() {
+fn from_bytes_rejects_data_that_is_not_a_model() {
     let err = Detector::from_bytes(b"definitely not a tflite file").unwrap_err();
     assert!(err.to_string().starts_with("invalid language detector model"), "{err}");
+}
+
+proptest! {
+    #[test]
+    fn predict_returns_a_sorted_distribution_for_any_text(text in any::<String>(), k in 1_usize..200) {
+        let detector = Detector::new().expect("the bundled model loads");
+        let all = detector.predict(&text, usize::MAX).expect("prediction succeeds");
+        prop_assert_eq!(all.len(), LABELS);
+        prop_assert!(all.windows(2).all(|p| p[0].probability >= p[1].probability));
+        let sum: f32 = all.iter().map(|p| p.probability).sum();
+        prop_assert!((sum - 1.0).abs() < 1e-4, "sum = {}", sum);
+        // The top k are a prefix of the full ranking.
+        let top = detector.predict(&text, k).expect("prediction succeeds");
+        prop_assert_eq!(&*top, &all[..k.min(LABELS)]);
+    }
+}
+
+/// The model `Detector::new` embeds.
+const MODEL: &[u8] = include_bytes!("../vendor/model/language_detector.tflite");
+
+proptest! {
+    #[test]
+    fn from_bytes_rejects_corrupted_models_without_panicking(
+        flips in proptest::collection::vec((0..MODEL.len(), 1..=u8::MAX), 1..8),
+    ) {
+        let mut model = MODEL.to_vec();
+        for (offset, mask) in flips {
+            model[offset] ^= mask;
+        }
+        // Flipped bytes in weights still make a valid model: it must then predict or report an error.
+        if let Ok(detector) = Detector::from_bytes(&model)
+            && let Ok(top) = detector.predict("hello", 1)
+        {
+            prop_assert_eq!(top.len(), 1);
+        }
+    }
+
+    #[test]
+    fn from_bytes_rejects_truncated_models(len in 0..MODEL.len()) {
+        prop_assert!(Detector::from_bytes(&MODEL[..len]).is_err());
+    }
 }

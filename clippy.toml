@@ -1,2 +1,8 @@
 # Proper names used in docs; ".." keeps clippy's defaults.
 doc-valid-idents = ["MediaPipe", "TFLite", "XNNPACK", "FlatBuffers", "FlexBuffers", ".."]
+
+# Tests report failures by panicking; production code handles errors instead.
+allow-expect-in-tests = true
+allow-indexing-slicing-in-tests = true
+allow-panic-in-tests = true
+allow-unwrap-in-tests = true

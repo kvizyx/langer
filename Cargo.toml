@@ -19,7 +19,10 @@ divan = { version = "0.1.21", default-features = false }
 flatbuffers = { version = "25.12.19", default-features = false }
 flexbuffers = { version = "25.12.19", default-features = false }
 http-body-util = { version = "0.1", default-features = false }
+insta = { version = "1.49.0", default-features = false, features = ["json"] }
 lingua = { version = "1.8.0", default-features = false }
+proptest = { version = "1.12.0", default-features = false, features = ["std"] }
+rstest = { version = "0.28.0", default-features = false }
 serde = { version = "1.0.229", default-features = false, features = ["std"] }
 serde_json = { version = "1.0.154", default-features = false, features = ["std"] }
 tokio = { version = "1.54.1", default-features = false }
@@ -58,10 +61,12 @@ clone_on_ref_ptr = "warn"
 deref_by_slicing = "warn"
 disallowed_script_idents = "warn"
 empty_drop = "warn"
+expect_used = "warn"
 empty_enum_variants_with_brackets = "warn"
 empty_structs_with_brackets = "warn"
 fn_to_numeric_cast_any = "warn"
 if_then_some_else_none = "warn"
+indexing_slicing = "warn"
 map_err_ignore = "warn"
 redundant_type_annotations = "warn"
 renamed_function_params = "warn"
@@ -71,6 +76,11 @@ unnecessary_safety_comment = "warn"
 unnecessary_safety_doc = "warn"
 unneeded_field_pattern = "warn"
 unused_result_ok = "warn"
+panic = "warn"
+todo = "warn"
+unimplemented = "warn"
+unreachable = "warn"
+unwrap_used = "warn"
 too_long_first_doc_paragraph = "warn"
 
 # Internal crates are never published, so crates.io metadata is not needed.
@@ -81,7 +91,8 @@ multiple_crate_versions = "allow"
 [profile.release]
 lto = "fat"
 codegen-units = 1
-panic = "abort"
+# Unwinding lets a panic, should one happen, end as a 500 response instead of stopping the service.
+panic = "unwind"
 strip = true
 
 [profile.bench]

@@ -5,6 +5,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::{env, fs};
 
+use anyhow::{Context as _, ensure};
+
 const SOURCE: &str = "data/languages.json";
 
 /// Values of `Method` in `src/detect.rs`.
@@ -19,35 +21,37 @@ struct Language {
     methods: Vec<String>,
 }
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     println!("cargo::rerun-if-changed={SOURCE}");
-    let source = fs::read_to_string(SOURCE).expect("languages file is readable");
-    let languages: Vec<Language> = serde_json::from_str(&source).expect("languages file is a JSON array of languages");
+    let source = fs::read_to_string(SOURCE).with_context(|| format!("cannot read {SOURCE}"))?;
+    let languages: Vec<Language> =
+        serde_json::from_str(&source).with_context(|| format!("{SOURCE} is not a JSON array of languages"))?;
 
     let mut by_code = BTreeMap::new();
     for language in &languages {
-        assert!(
+        ensure!(
             !language.iso_639_1.is_empty() && !language.name.is_empty(),
             "{SOURCE}: empty code or name"
         );
-        assert!(
+        ensure!(
             !language.methods.is_empty(),
             "{SOURCE}: {} has no methods",
             language.iso_639_1
         );
         for method in &language.methods {
-            assert!(
+            ensure!(
                 METHODS.contains(&method.as_str()),
                 "{SOURCE}: {} has unknown method {method:?}",
                 language.iso_639_1
             );
         }
         let duplicate = by_code.insert(language.iso_639_1.as_str(), language);
-        assert!(duplicate.is_none(), "{SOURCE}: duplicate code {}", language.iso_639_1);
+        ensure!(duplicate.is_none(), "{SOURCE}: duplicate code {}", language.iso_639_1);
     }
 
-    let out = PathBuf::from(env::var_os("OUT_DIR").expect("cargo sets OUT_DIR"));
+    let out = PathBuf::from(env::var_os("OUT_DIR").context("cargo did not set OUT_DIR")?);
     let sorted: Vec<&Language> = by_code.values().copied().collect();
-    let json = serde_json::to_string(&sorted).expect("strings always serialize");
-    fs::write(out.join("languages.json"), json).expect("OUT_DIR is writable");
+    let json = serde_json::to_string(&sorted)?;
+    fs::write(out.join("languages.json"), json).context("cannot write to OUT_DIR")?;
+    Ok(())
 }

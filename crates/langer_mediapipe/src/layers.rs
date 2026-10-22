@@ -1,5 +1,7 @@
 //! Numeric ops of the model, following the TFLite reference kernels.
 
+use crate::PredictError;
+
 /// `KmeansEmbeddingLookup`: averages the embeddings of the ids in a row.
 ///
 /// An embedding is split into `codes_per_id` blocks; each block is a codebook vector
@@ -28,18 +30,22 @@ impl KmeansEmbedding {
     }
 
     /// Appends the mean embedding of `ids` to `out`. Id 0 ends the row, as padding.
-    pub(crate) fn lookup_into(&self, ids: &[u32], out: &mut Vec<f32>) {
-        let start = out.len();
-        out.resize(start + self.width(), 0.0);
-        let sum = &mut out[start..];
+    pub(crate) fn lookup_into(&self, ids: &[u32], out: &mut Vec<f32>) -> Result<(), PredictError> {
+        let mut sum = vec![0.0; self.width()];
         let mut count = 0_usize;
         for &id in ids.iter().take_while(|&&id| id != 0) {
             count += 1;
-            let id = id as usize;
-            let codes = &self.codes[id * self.codes_per_id..(id + 1) * self.codes_per_id];
+            let codes = self
+                .codes
+                .chunks_exact(self.codes_per_id)
+                .nth(id as usize)
+                .ok_or_else(|| PredictError::new("n-gram id outside the embedding table"))?;
             for (block, &code) in sum.chunks_exact_mut(self.block).zip(codes) {
-                let index = usize::from(code);
-                let centroid = &self.codebook[index * self.block..(index + 1) * self.block];
+                let centroid = self
+                    .codebook
+                    .chunks_exact(self.block)
+                    .nth(usize::from(code))
+                    .ok_or_else(|| PredictError::new("embedding code outside the codebook"))?;
                 for (s, c) in block.iter_mut().zip(centroid) {
                     *s += c;
                 }
@@ -50,9 +56,8 @@ impl KmeansEmbedding {
             reason = "the id count is bounded by max_splits, far below 2^24"
         )]
         let count = count.max(1) as f32;
-        for s in sum {
-            *s /= count;
-        }
+        out.extend(sum.iter().map(|s| s / count));
+        Ok(())
     }
 }
 
@@ -178,37 +183,46 @@ pub(crate) fn softmax(values: &mut [f32], beta: f32) {
 
 #[cfg(test)]
 mod tests {
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
     use super::*;
 
-    #[test]
-    #[expect(clippy::float_cmp, reason = "zero must be represented exactly")]
-    fn dynamic_quantization_represents_zero_and_extremes() {
-        let (q, scale, offset) = quantize_dynamic(&[-1.0, 0.0, 0.5, 3.0]);
-        let offset = f32::from(i16::try_from(offset).unwrap());
-        let dequantize = |q: i8| (f32::from(q) - offset) * scale;
-        assert_eq!(dequantize(q[1]), 0.0);
-        assert!((dequantize(q[0]) + 1.0).abs() <= scale);
-        assert!((dequantize(q[3]) - 3.0).abs() <= scale);
-        assert_eq!((q[0], q[3]), (-128, 127));
+    /// Maps quantized values back to floats.
+    fn dequantize(values: &[f32]) -> (Vec<f32>, f32) {
+        let (quantized, scale, zero_point) = quantize_dynamic(values);
+        let zero_point = f32::from(i16::try_from(zero_point).expect("zero point is in the i8 range"));
+        let restored = quantized.iter().map(|&q| (f32::from(q) - zero_point) * scale).collect();
+        (restored, scale)
     }
 
     #[test]
-    fn hybrid_dense_approximates_float_product() {
+    fn quantize_dynamic_maps_extremes_to_the_i8_range() {
+        let (quantized, _, _) = quantize_dynamic(&[-1.0, 0.0, 0.5, 3.0]);
+        assert_eq!((quantized[0], quantized[3]), (-128, 127));
+    }
+
+    #[test]
+    fn hybrid_dense_approximates_the_float_product() {
         let weights: Box<[i8]> = Box::new([10, -20, 30, 5, 5, 5]);
-        let input = [1.0, 2.0, -0.5];
-        let linear = HybridDense::new(weights.clone(), 3, 0.1, Box::new([0.5, -100.0]), false);
-        let out = linear.apply(&input);
+        let linear = HybridDense::new(weights, 3, 0.1, Box::new([0.5, -100.0]), false);
+        let out = linear.apply(&[1.0, 2.0, -0.5]);
         // Exact: 0.5 + 0.1 * (10 - 40 - 15) and -100 + 0.1 * (5 + 10 - 2.5).
         assert!((out[0] + 4.0).abs() < 0.05, "{out:?}");
         assert!((out[1] + 98.75).abs() < 0.05, "{out:?}");
-        // ReLU clamps negative outputs; an all-zero input yields the (clamped) bias.
+    }
+
+    #[test]
+    fn hybrid_dense_with_relu_clamps_negative_outputs() {
+        let weights: Box<[i8]> = Box::new([10, -20, 30, 5, 5, 5]);
         let relu = HybridDense::new(weights, 3, 0.1, Box::new([0.5, -100.0]), true);
-        assert_eq!(relu.apply(&input), [0.0, 0.0]);
+        assert_eq!(relu.apply(&[1.0, 2.0, -0.5]), [0.0, 0.0]);
+        // An all-zero input yields the (clamped) bias.
         assert_eq!(relu.apply(&[0.0; 3]), [0.5, 0.0]);
     }
 
     #[test]
-    fn embedding_is_the_mean_of_codebook_blocks() {
+    fn kmeans_embedding_averages_codebook_blocks_until_padding() {
         let embedding = KmeansEmbedding {
             // Ids 0..=2, two blocks each.
             codes: Box::new([0, 0, 0, 1, 1, 0]),
@@ -217,16 +231,37 @@ mod tests {
             block: 2,
         };
         let mut out = vec![7.0];
-        embedding.lookup_into(&[1, 2, 0, 1], &mut out);
+        embedding.lookup_into(&[1, 2, 0, 1], &mut out).unwrap();
         // Id 1 -> [1, 2, 10, 20], id 2 -> [10, 20, 1, 2]; the 0 stops the row.
         assert_eq!(out, [7.0, 5.5, 11.0, 5.5, 11.0]);
     }
 
-    #[test]
-    fn softmax_is_a_distribution() {
-        let mut v = [1.0, 2.0, 3.0];
-        softmax(&mut v, 1.0);
-        assert!((v.iter().sum::<f32>() - 1.0).abs() < 1e-6);
-        assert!(v[2] > v[1] && v[1] > v[0]);
+    proptest! {
+        #[test]
+        #[expect(clippy::float_cmp, reason = "zero must be represented exactly")]
+        fn quantize_dynamic_loses_at_most_one_step(values in vec(-100.0_f32..100.0, 1..64)) {
+            let (restored, scale) = dequantize(&values);
+            for (&value, &restored) in values.iter().zip(&restored) {
+                prop_assert!((value - restored).abs() <= scale, "{value} -> {restored}, scale {scale}");
+            }
+            let (zero, _) = dequantize(&[0.0]);
+            prop_assert_eq!(zero[0], 0.0);
+        }
+
+        #[test]
+        fn softmax_returns_a_distribution_in_input_order(
+            mut values in vec(-50.0_f32..50.0, 1..200),
+            beta in 0.1_f32..2.0,
+        ) {
+            let input = values.clone();
+            softmax(&mut values, beta);
+            prop_assert!((values.iter().sum::<f32>() - 1.0).abs() < 1e-5);
+            prop_assert!(values.iter().all(|p| (0.0..=1.0).contains(p)));
+            for (i, j) in (0..input.len()).flat_map(|i| (0..input.len()).map(move |j| (i, j))) {
+                if input[i] > input[j] {
+                    prop_assert!(values[i] >= values[j]);
+                }
+            }
+        }
     }
 }

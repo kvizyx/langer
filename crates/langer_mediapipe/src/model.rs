@@ -2,10 +2,10 @@ use std::collections::HashMap;
 use std::fmt;
 use std::io::{Cursor, Read};
 
-use crate::LoadError;
 use crate::layers::{HybridDense, KmeansEmbedding, softmax};
 use crate::ngram::NgramHash;
 use crate::schema_generated::tflite as fb;
+use crate::{LoadError, PredictError};
 
 /// MediaPipe's language detector model (`language_detector.tflite`, float32, version 1);
 /// see `README.md`.
@@ -41,12 +41,11 @@ pub struct Detector {
 impl Detector {
     /// Creates a detector from the bundled MediaPipe model.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Only if the bundled model fails to load, which tests rule out.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::from_bytes(BUNDLED_MODEL).expect("the bundled model is valid")
+    /// Returns an error only if the bundled model fails to load, which tests rule out.
+    pub fn new() -> Result<Self, LoadError> {
+        Self::from_bytes(BUNDLED_MODEL)
     }
 
     /// Loads a MediaPipe language detector model from the bytes of its `.tflite` file.
@@ -80,17 +79,24 @@ impl Detector {
 
     /// Returns the `k` most probable languages of `text`, most probable first.
     ///
-    /// Returns an empty vector for an empty `text`, which MediaPipe rejects.
-    #[must_use]
-    pub fn predict(&self, text: &str, k: usize) -> Vec<Prediction<'_>> {
-        if text.is_empty() || k == 0 {
-            return Vec::new();
+    /// Any text has a prediction, as in MediaPipe: an empty one is classified by the start
+    /// and end markers alone.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only if the model is internally inconsistent, which loading checks.
+    pub fn predict(&self, text: &str, k: usize) -> Result<Vec<Prediction<'_>>, PredictError> {
+        if k == 0 {
+            return Ok(Vec::new());
         }
-        let ids = self.ngram.hash(text);
+        let ids = self.ngram.hash(text)?;
         let width = self.embeddings.iter().map(|(_, e)| e.width()).sum();
         let mut features = Vec::with_capacity(width);
         for (head, embedding) in &self.embeddings {
-            embedding.lookup_into(&ids[*head], &mut features);
+            let head_ids = ids
+                .get(*head)
+                .ok_or_else(|| PredictError::new("embedding reads a missing n-gram head"))?;
+            embedding.lookup_into(head_ids, &mut features)?;
         }
         let mut scores = self.dense.iter().fold(features, |x, layer| layer.apply(&x));
         softmax(&mut scores, self.softmax_beta);
@@ -104,13 +110,7 @@ impl Detector {
         // Stable, so ties keep model order.
         ranked.sort_by(|a, b| b.probability.total_cmp(&a.probability));
         ranked.truncate(k);
-        ranked
-    }
-}
-
-impl Default for Detector {
-    fn default() -> Self {
-        Self::new()
+        Ok(ranked)
     }
 }
 
@@ -219,7 +219,11 @@ impl<'a> Graph<'a> {
                 .position(|&t| t == ids)
                 .ok_or_else(|| LoadError::new("KmeansEmbeddingLookup does not read an NGramHash head"))?;
             let embedding = self.embedding(codes, codebook)?;
-            if ngram.heads[head].1 >= embedding.ids() as u64 {
+            let &(_, vocab) = ngram
+                .heads
+                .get(head)
+                .ok_or_else(|| LoadError::new("Unpack does not split the NGramHash heads"))?;
+            if u64::from(vocab) >= embedding.ids() as u64 {
                 return Err(LoadError::new("embedding table is smaller than the hash vocabulary"));
             }
             embeddings.push((head, embedding));
@@ -321,11 +325,13 @@ impl<'a> Graph<'a> {
             .into_iter()
             .zip(vocab_sizes)
             .map(|(n, vocab)| {
-                usize::try_from(n)
+                let n = usize::try_from(n)
                     .ok()
                     .filter(|&n| n > 0)
-                    .map(|n| (n, vocab))
-                    .ok_or_else(|| LoadError::new("invalid n-gram length"))
+                    .ok_or_else(|| LoadError::new("invalid n-gram length"))?;
+                let vocab =
+                    u32::try_from(vocab).map_err(|e| LoadError::with_source("invalid NGramHash vocabulary size", e))?;
+                Ok((n, vocab))
             })
             .collect::<Result<_, _>>()?;
         Ok((
@@ -480,7 +486,7 @@ impl<'a> Graph<'a> {
             .collect();
         producers
             .get(&tensor)
-            .map(|&i| &self.ops[i])
+            .and_then(|&i| self.ops.get(i))
             .filter(|(k, _)| *k == kind)
             .map(|(_, op)| *op)
             .ok_or_else(|| LoadError::new(format!("no {kind:?} operator writes the expected tensor")))

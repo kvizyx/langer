@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
         .with_ansi(std::io::stdout().is_terminal())
         .init();
 
-    let detectors = load_detectors();
+    let detectors = load_detectors()?;
 
     // Lingua runs on blocking threads; more of them than cores only adds memory and
     // context switches for this CPU-bound work. Respects cgroup CPU limits.
@@ -42,9 +42,9 @@ fn main() -> anyhow::Result<()> {
         .block_on(serve(config.port, detectors))
 }
 
-fn load_detectors() -> Detectors {
+fn load_detectors() -> anyhow::Result<Detectors> {
     let started = Instant::now();
-    let mediapipe = Detector::new();
+    let mediapipe = Detector::new().context("cannot load the MediaPipe language detector")?;
     tracing::event!(
         name: "model.mediapipe.loaded",
         Level::INFO,
@@ -54,7 +54,7 @@ fn load_detectors() -> Detectors {
     );
     // Lingua's models are memory-mapped from the executable on first use; nothing to preload.
     let lingua = LanguageDetectorBuilder::from_all_languages().build();
-    Detectors::new(mediapipe, lingua)
+    Ok(Detectors::new(mediapipe, lingua))
 }
 
 async fn serve(port: u16, detectors: Detectors) -> anyhow::Result<()> {

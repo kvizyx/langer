@@ -1,0 +1,253 @@
+---
+source: crates/langer/tests/api.rs
+expression: spec
+---
+{
+  "components": {
+    "schemas": {
+      "DetectRequest": {
+        "description": "Body of `POST /detect`.",
+        "properties": {
+          "method": {
+            "$ref": "#/components/schemas/Method",
+            "description": "Detection method."
+          },
+          "text": {
+            "description": "Text to detect the language of.",
+            "example": "Hi, how are you?",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "Detection": {
+        "description": "Result of a detection.",
+        "properties": {
+          "confidence": {
+            "description": "Confidence in `0.0..=1.0`; `null` when Lingua cannot decide.",
+            "example": 0.97,
+            "format": "double",
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "language": {
+            "description": "Language code. MediaPipe reports its own codes (e.g. `iw`, `fil`, `zh-Latn`) and\n`unknown`; Lingua reports ISO 639-1 codes, or `unknown` when it cannot decide.",
+            "example": "en",
+            "type": "string"
+          },
+          "method": {
+            "$ref": "#/components/schemas/Method",
+            "description": "Method that produced the result."
+          }
+        },
+        "required": [
+          "language",
+          "method"
+        ],
+        "type": "object"
+      },
+      "ErrorBody": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "extra": {
+            "description": "Validation problems, if any.",
+            "items": {
+              "$ref": "#/components/schemas/ErrorExtra"
+            },
+            "type": "array"
+          },
+          "status_code": {
+            "format": "int32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status_code",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "ErrorExtra": {
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "type": "object"
+      },
+      "Health": {
+        "description": "Health of the service.",
+        "properties": {
+          "status": {
+            "example": "ok",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "type": "object"
+      },
+      "Language": {
+        "description": "A language and the methods that can detect it.",
+        "properties": {
+          "iso_639_1": {
+            "description": "ISO 639-1 code.",
+            "example": "en",
+            "type": "string"
+          },
+          "methods": {
+            "description": "Methods that can return this language.",
+            "items": {
+              "$ref": "#/components/schemas/Method"
+            },
+            "type": "array"
+          },
+          "name": {
+            "description": "English name.",
+            "example": "English",
+            "type": "string"
+          }
+        },
+        "required": [
+          "iso_639_1",
+          "name",
+          "methods"
+        ],
+        "type": "object"
+      },
+      "Method": {
+        "description": "Detection method requested by a client.",
+        "enum": [
+          "mediapipe",
+          "lingua"
+        ],
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "description": "Self-host language detection HTTP service, based on Lingua and MediaPipe.",
+    "license": {
+      "identifier": "MIT",
+      "name": "MIT"
+    },
+    "title": "Langer API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/detect": {
+      "post": {
+        "description": "`mediapipe` (default) answers in tens of microseconds, `lingua` is more accurate on one or two words but takes about a millisecond.",
+        "operationId": "detect",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Detection"
+                }
+              }
+            },
+            "description": "Detected language"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Invalid body or empty text"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Detection failed"
+          }
+        },
+        "summary": "Detect the language of a text",
+        "tags": [
+          "Detect"
+        ]
+      }
+    },
+    "/detect/languages": {
+      "get": {
+        "description": "Every language with the methods that can detect it, sorted by code.",
+        "operationId": "languages",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Language"
+                  },
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Supported languages"
+          }
+        },
+        "summary": "List supported languages for detection",
+        "tags": [
+          "Detect"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Service is up"
+          }
+        },
+        "summary": "Health check"
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "Language detection and supported languages",
+      "name": "Detect"
+    }
+  ]
+}

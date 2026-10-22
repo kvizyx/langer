@@ -13,7 +13,8 @@ fn shift_mix(v: u64) -> u64 {
 
 /// Hashes `data` with `seed`.
 pub(crate) fn hash64(data: &[u8], seed: u64) -> u64 {
-    let len = u64::try_from(data.len()).expect("slice length fits in u64");
+    // Lossless: usize is at most 64 bits on every target Rust supports.
+    let len = data.len() as u64;
     let mut hash = seed ^ len.wrapping_mul(MUL);
     let (words, tail) = data.as_chunks::<8>();
     for word in words {
@@ -23,7 +24,9 @@ pub(crate) fn hash64(data: &[u8], seed: u64) -> u64 {
     }
     if !tail.is_empty() {
         let mut last = [0; 8];
-        last[..tail.len()].copy_from_slice(tail);
+        for (byte, &tail_byte) in last.iter_mut().zip(tail) {
+            *byte = tail_byte;
+        }
         hash ^= u64::from_le_bytes(last);
         hash = hash.wrapping_mul(MUL);
     }
@@ -35,13 +38,13 @@ mod tests {
     use super::hash64;
 
     #[test]
-    fn empty_input_with_zero_seed_is_zero() {
+    fn hash64_of_empty_input_with_zero_seed_is_zero() {
         // From MediaPipe's murmur_test.cc.
         assert_eq!(hash64(&[], 0), 0);
     }
 
     #[test]
-    fn seed_and_every_byte_change_the_hash() {
+    fn hash64_depends_on_seed_every_byte_and_length() {
         let data = b"hello world, this crosses a word boundary";
         assert_ne!(hash64(&data[..1], 100), hash64(&data[..1], 101));
         let base = hash64(data, 7);

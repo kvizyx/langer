@@ -52,3 +52,34 @@ impl std::error::Error for LoadError {
         self.source.as_deref().map(|e| e as _)
     }
 }
+
+/// Error returned when a prediction cannot be computed.
+///
+/// Only an inconsistency inside a loaded model can cause it, and loading checks the model
+/// for those; it is returned rather than panicking in case a check is missing.
+#[derive(Debug)]
+pub struct PredictError {
+    message: &'static str,
+    backtrace: Backtrace,
+}
+
+impl PredictError {
+    pub(crate) fn new(message: &'static str) -> Self {
+        Self {
+            message,
+            backtrace: Backtrace::capture(),
+        }
+    }
+}
+
+impl fmt::Display for PredictError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "language prediction failed: {}", self.message)?;
+        if self.backtrace.status() == BacktraceStatus::Captured {
+            write!(f, "\n{}", self.backtrace)?;
+        }
+        Ok(())
+    }
+}
+
+impl std::error::Error for PredictError {}

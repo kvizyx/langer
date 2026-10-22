@@ -18,10 +18,7 @@ const MAX: u32 = 0x10_FFFF;
 
 /// `utf_isalpharune`.
 pub(crate) fn is_alpha(c: u32) -> bool {
-    let in_range = match ALPHA_RANGES.partition_point(|&(start, _)| start <= c) {
-        0 => false,
-        i => c <= ALPHA_RANGES[i - 1].1,
-    };
+    let in_range = last_starting_at_or_before(ALPHA_RANGES, c, |r| r.0).is_some_and(|&(_, end)| c <= end);
     in_range || ALPHA_SINGLES.binary_search(&c).is_ok()
 }
 
@@ -40,16 +37,14 @@ pub(crate) fn to_lower(c: u32) -> u32 {
         return shift(delta);
     }
     match LOWER_SINGLES.binary_search_by_key(&c, |&(cp, _)| cp) {
-        Ok(i) => shift(LOWER_SINGLES[i].1),
+        Ok(i) => LOWER_SINGLES.get(i).map_or(c, |&(_, delta)| shift(delta)),
         Err(_) => c,
     }
 }
 
 fn last_starting_at_or_before<T>(table: &[T], c: u32, start: impl Fn(&T) -> u32) -> Option<&T> {
-    match table.partition_point(|row| start(row) <= c) {
-        0 => None,
-        i => Some(&table[i - 1]),
-    }
+    let after = table.partition_point(|row| start(row) <= c);
+    table.get(after.checked_sub(1)?)
 }
 
 /// Outcome of decoding one character with `utf_charntorune`.
@@ -72,7 +67,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Decoded {
     let bad = Decoded::Rune(REPLACEMENT, 1);
     // Payload of continuation byte `i`, or `None` if it is not a continuation byte.
     let cont = |i: usize| -> Option<u32> {
-        let b = bytes[i] ^ 0x80;
+        let b = bytes.get(i)? ^ 0x80;
         (b & 0xC0 == 0).then_some(u32::from(b))
     };
     let lead = u32::from(b0);
@@ -123,48 +118,109 @@ pub(crate) fn encode(rune: u32, out: &mut Vec<u8>) {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+    use rstest::rstest;
+
     use super::*;
 
-    #[test]
-    fn letters_are_alphabetic_and_the_rest_is_not() {
-        for c in ['a', 'Z', 'é', 'Ж', 'あ', '中', 'ß'] {
-            assert!(is_alpha(u32::from(c)), "{c}");
-        }
-        for c in [' ', '1', '!', '😀', '٣', '\u{0}'] {
-            assert!(!is_alpha(u32::from(c)), "{c:?}");
-        }
+    #[rstest]
+    #[case::latin_lower('a')]
+    #[case::latin_upper('Z')]
+    #[case::latin_accented('é')]
+    #[case::sharp_s('ß')]
+    #[case::cyrillic('Ж')]
+    #[case::armenian('ա')]
+    #[case::hiragana('あ')]
+    #[case::han('中')]
+    #[case::hangul('한')]
+    fn is_alpha_accepts_letters_of_any_script(#[case] c: char) {
+        assert!(is_alpha(u32::from(c)));
     }
 
-    #[test]
-    fn lowercases_like_plan9() {
-        let lower = |c: char| char::from_u32(to_lower(u32::from(c))).unwrap();
-        // Cases from MediaPipe's ngram_hash_ops_utils_test.cc.
-        assert_eq!(lower('E'), 'e');
-        assert_eq!(lower('Б'), 'б');
-        assert_eq!(lower('Й'), 'й');
-        assert_eq!(lower('あ'), 'あ');
-        // Alternating ranges only map their even offsets (Ā -> ā, ā stays).
-        assert_eq!(lower('Ā'), 'ā');
-        assert_eq!(lower('ā'), 'ā');
-        // Turkish dotted capital I loses its dot, unlike Unicode's full mapping.
-        assert_eq!(lower('İ'), 'i');
-        assert_eq!(lower('1'), '1');
+    #[rstest]
+    #[case::space(' ')]
+    #[case::digit('1')]
+    #[case::punctuation('!')]
+    #[case::emoji('😀')]
+    #[case::arabic_digit('٣')]
+    #[case::nul('\u{0}')]
+    #[case::combining_accent('\u{301}')]
+    fn is_alpha_rejects_everything_else(#[case] c: char) {
+        assert!(!is_alpha(u32::from(c)));
     }
 
-    #[test]
-    fn decodes_valid_and_malformed_utf8() {
-        for c in ['a', 'é', 'ж', '中', '😀'] {
-            let mut buf = [0; 4];
-            let bytes = c.encode_utf8(&mut buf).as_bytes();
-            assert_eq!(decode(bytes), Decoded::Rune(u32::from(c), bytes.len()));
-            if bytes.len() > 1 {
-                assert_eq!(decode(&bytes[..bytes.len() - 1]), Decoded::Truncated);
+    // Cases from MediaPipe's ngram_hash_ops_utils_test.cc, then Plan 9 specifics.
+    #[rstest]
+    #[case::latin('E', 'e')]
+    #[case::cyrillic('Б', 'б')]
+    #[case::cyrillic_short_i('Й', 'й')]
+    #[case::caseless('あ', 'あ')]
+    #[case::digit('1', '1')]
+    // Alternating ranges map only their even offsets: Ā -> ā, ā stays.
+    #[case::alternating_upper('Ā', 'ā')]
+    #[case::alternating_lower('ā', 'ā')]
+    // Unlike Unicode's full mapping, the dotted capital I loses its dot.
+    #[case::dotted_capital_i('İ', 'i')]
+    fn to_lower_maps_like_plan9(#[case] upper: char, #[case] lower: char) {
+        assert_eq!(char::from_u32(to_lower(u32::from(upper))), Some(lower));
+    }
+
+    #[rstest]
+    #[case::ascii(b"a", Decoded::Rune(0x61, 1))]
+    #[case::two_bytes("é".as_bytes(), Decoded::Rune(0xE9, 2))]
+    #[case::four_bytes("😀".as_bytes(), Decoded::Rune(0x1F600, 4))]
+    #[case::stray_continuation(&[0x80, 0x80], Decoded::Rune(REPLACEMENT, 1))]
+    #[case::missing_continuation(&[0xC3, 0x41], Decoded::Rune(REPLACEMENT, 1))]
+    #[case::overlong(&[0xC0, 0x80], Decoded::Rune(REPLACEMENT, 1))]
+    #[case::beyond_unicode(&[0xF4, 0x90, 0x80, 0x80], Decoded::Rune(REPLACEMENT, 1))]
+    #[case::five_byte_lead(&[0xF8, 0x88, 0x80, 0x80, 0x80], Decoded::Rune(REPLACEMENT, 1))]
+    // A character cut by the end of the input is truncated, not malformed.
+    #[case::cut_two_bytes(&[0xC3], Decoded::Truncated)]
+    #[case::cut_four_bytes(&[0xF0, 0x9F, 0x98], Decoded::Truncated)]
+    #[case::cut_continuation(&[0x80], Decoded::Truncated)]
+    #[case::empty(&[], Decoded::Truncated)]
+    fn decode_reads_the_first_character(#[case] bytes: &[u8], #[case] expected: Decoded) {
+        assert_eq!(decode(bytes), expected);
+    }
+
+    proptest! {
+        #[test]
+        fn decode_matches_std_on_valid_utf8(text in any::<String>()) {
+            let mut bytes = text.as_bytes();
+            let mut decoded = Vec::new();
+            while !bytes.is_empty() {
+                let Decoded::Rune(rune, read) = decode(bytes) else {
+                    panic!("valid UTF-8 is never truncated");
+                };
+                decoded.push(rune);
+                bytes = &bytes[read..];
+            }
+            prop_assert_eq!(decoded, text.chars().map(u32::from).collect::<Vec<_>>());
+        }
+
+        #[test]
+        fn decode_consumes_at_least_one_byte_of_any_input(bytes in proptest::collection::vec(any::<u8>(), 1..8)) {
+            match decode(&bytes) {
+                Decoded::Rune(_, read) => prop_assert!((1..=bytes.len()).contains(&read)),
+                // Only an incomplete character at the end of the input is truncated.
+                Decoded::Truncated => prop_assert!(bytes.len() < 4 && bytes[0] >= 0x80),
             }
         }
-        // A stray continuation byte is malformed, unless it is the last byte (truncated).
-        assert_eq!(decode(&[0x80, 0x80]), Decoded::Rune(REPLACEMENT, 1));
-        assert_eq!(decode(&[0x80]), Decoded::Truncated);
-        assert_eq!(decode(&[0xC3, 0x41]), Decoded::Rune(REPLACEMENT, 1));
-        assert_eq!(decode(&[]), Decoded::Truncated);
+
+        #[test]
+        fn encode_writes_utf8(c in any::<char>()) {
+            let mut out = Vec::new();
+            encode(u32::from(c), &mut out);
+            prop_assert_eq!(out, c.to_string().into_bytes());
+        }
+    }
+
+    #[rstest]
+    #[case::surrogate(0xD800)]
+    #[case::beyond_unicode(0x11_0000)]
+    fn encode_replaces_invalid_code_points(#[case] rune: u32) {
+        let mut out = Vec::new();
+        encode(rune, &mut out);
+        assert_eq!(out, "\u{FFFD}".as_bytes());
     }
 }

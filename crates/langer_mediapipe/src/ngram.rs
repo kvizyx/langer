@@ -1,5 +1,6 @@
 //! The `NGramHash` op: character n-grams of a text, hashed into vocabulary buckets.
 
+use crate::PredictError;
 use crate::murmur;
 use crate::unicode::{self, Decoded};
 
@@ -15,7 +16,7 @@ const SEPARATOR: u8 = b' ';
 pub(crate) struct NgramHash {
     pub(crate) seed: u64,
     /// N-gram length (in characters) and vocabulary size of every output row.
-    pub(crate) heads: Box<[(usize, u64)]>,
+    pub(crate) heads: Box<[(usize, u32)]>,
     /// Maximum number of tokens, including the prefix and suffix markers.
     pub(crate) max_splits: usize,
     pub(crate) lowercase: bool,
@@ -25,7 +26,7 @@ impl NgramHash {
     /// Returns one row of bucket ids per head, each with one id per token.
     ///
     /// Ids are in `1..=vocab_size`; 0 is reserved for padding.
-    pub(crate) fn hash(&self, text: &str) -> Vec<Vec<u32>> {
+    pub(crate) fn hash(&self, text: &str) -> Result<Vec<Vec<u32>>, PredictError> {
         let input = if self.lowercase {
             lowercase(text)
         } else {
@@ -37,10 +38,17 @@ impl NgramHash {
             .map(|&(n, vocab)| {
                 (0..tokens.len())
                     .map(|start| {
-                        let end = (start + n).min(tokens.len());
-                        let bytes = &tokens.text[tokens.offsets[start]..tokens.offsets[end]];
-                        let bucket = murmur::hash64(bytes, self.seed) % vocab;
-                        u32::try_from(bucket + 1).expect("vocabulary sizes are validated to fit in i32")
+                        let bytes = tokens
+                            .span(start, (start + n).min(tokens.len()))
+                            .ok_or_else(|| PredictError::new("n-gram outside the tokens"))?;
+                        let bucket = murmur::hash64(bytes, self.seed) % u64::from(vocab);
+                        #[expect(
+                            clippy::cast_possible_truncation,
+                            reason = "the remainder is smaller than the vocabulary size, a u32"
+                        )]
+                        let bucket = bucket as u32;
+                        // `bucket < vocab`, so this cannot overflow.
+                        Ok(bucket + 1)
                     })
                     .collect()
             })
@@ -70,6 +78,11 @@ impl Tokens {
         self.offsets.len() - 1
     }
 
+    /// Bytes of tokens `start..end`.
+    fn span(&self, start: usize, end: usize) -> Option<&[u8]> {
+        self.text.get(*self.offsets.get(start)?..*self.offsets.get(end)?)
+    }
+
     fn push(&mut self, bytes: &[u8]) {
         self.text.extend_from_slice(bytes);
         self.offsets.push(self.text.len());
@@ -84,7 +97,7 @@ impl Tokens {
 /// the string's NUL terminator and whatever follows it. Those are modeled as NUL bytes,
 /// which become separators.
 fn tokenize(input: &[u8], len: usize, max_tokens: usize) -> Tokens {
-    let mut window = input[..len.min(input.len())].to_vec();
+    let mut window = input.get(..len).unwrap_or(input).to_vec();
     window.resize(len, 0);
 
     let mut tokens = Tokens {
@@ -93,12 +106,16 @@ fn tokenize(input: &[u8], len: usize, max_tokens: usize) -> Tokens {
     };
     tokens.push(&[PREFIX]);
     let mut i = 0;
-    while i < window.len() && tokens.len() + 1 < max_tokens {
-        let Decoded::Rune(rune, read) = unicode::decode(&window[i..]) else {
+    while let Some(rest) = window.get(i..).filter(|rest| !rest.is_empty())
+        && tokens.len() + 1 < max_tokens
+    {
+        let Decoded::Rune(rune, read) = unicode::decode(rest) else {
             break;
         };
-        if unicode::is_alpha(rune) {
-            tokens.push(&window[i..i + read]);
+        if unicode::is_alpha(rune)
+            && let Some(character) = rest.get(..read)
+        {
+            tokens.push(character);
         } else {
             tokens.push(&[SEPARATOR]);
         }
@@ -110,64 +127,94 @@ fn tokenize(input: &[u8], len: usize, max_tokens: usize) -> Tokens {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+    use rstest::rstest;
+
     use super::*;
 
-    fn tokens(text: &str, max_tokens: usize) -> String {
+    fn tokens(text: &str, max_tokens: usize) -> Vec<String> {
         let t = tokenize(text.as_bytes(), text.len(), max_tokens);
-        assert_eq!(t.offsets.len(), t.len() + 1);
-        String::from_utf8(t.text).unwrap()
+        t.offsets
+            .windows(2)
+            .map(|w| String::from_utf8(t.text[w[0]..w[1]].to_vec()).expect("tokens of valid UTF-8 are valid"))
+            .collect()
     }
 
-    #[test]
-    fn tokenizes_like_mediapipe() {
-        // Cases from MediaPipe's ngram_hash_ops_utils_test.cc.
-        assert_eq!(tokens("hi!", 100), "^hi $");
-        assert_eq!(tokens("har ki", 100), "^har ki$");
-        assert_eq!(tokens("hi!", 3), "^h$");
-        assert_eq!(tokens("ありがと", 100), "^ありがと$");
-        assert_eq!(tokens("12 😀", 100), "^    $");
-    }
-
-    #[test]
-    fn every_character_is_one_token() {
-        let t = tokenize("aж中".as_bytes(), "aж中".len(), 100);
-        let parts: Vec<&[u8]> = t.offsets.windows(2).map(|w| &t.text[w[0]..w[1]]).collect();
-        assert_eq!(parts, [&b"^"[..], b"a", "ж".as_bytes(), "中".as_bytes(), b"$"]);
-    }
-
-    #[test]
-    fn lowercases_letters_only() {
-        assert_eq!(lowercase("hElLo БЙп 1!"), "hello бйп 1!".as_bytes());
-        assert_eq!(lowercase("ありがと"), "ありがと".as_bytes());
-    }
-
-    #[test]
-    fn shortened_lowercase_text_is_padded_with_separators() {
-        // "İ" is two bytes, its lowercase "i" one: the window gains a NUL separator.
-        let text = "İz";
-        let lower = lowercase(text);
-        assert_eq!(lower, b"iz");
-        assert_eq!(
-            String::from_utf8(tokenize(&lower, text.len(), 100).text).unwrap(),
-            "^iz $"
-        );
-    }
-
-    #[test]
-    fn hashes_every_ngram_into_its_vocabulary() {
-        let op = NgramHash {
+    fn op() -> NgramHash {
+        NgramHash {
             seed: 10_911,
             heads: Box::new([(1, 50), (3, 7)]),
             max_splits: 128,
             lowercase: true,
-        };
-        let rows = op.hash("Hi");
-        assert_eq!(rows.len(), 2);
-        // "^", "h", "i", "$".
-        assert!(rows.iter().all(|row| row.len() == 4));
-        assert!(rows[0].iter().all(|&id| (1..=50).contains(&id)));
-        assert!(rows[1].iter().all(|&id| (1..=7).contains(&id)));
-        // Lowercasing happens before hashing.
-        assert_eq!(op.hash("HI"), op.hash("hi"));
+        }
+    }
+
+    // Cases from MediaPipe's ngram_hash_ops_utils_test.cc.
+    #[rstest]
+    #[case::punctuation_becomes_separator("hi!", 100, "^hi $")]
+    #[case::space_is_kept_as_separator("har ki", 100, "^har ki$")]
+    #[case::cut_at_max_tokens("hi!", 3, "^h$")]
+    #[case::non_latin_letters("ありがと", 100, "^ありがと$")]
+    #[case::no_letters("12 😀", 100, "^    $")]
+    fn tokenize_matches_mediapipe(#[case] text: &str, #[case] max_tokens: usize, #[case] expected: &str) {
+        assert_eq!(tokens(text, max_tokens).concat(), expected);
+    }
+
+    #[test]
+    fn tokenize_makes_one_token_per_character() {
+        assert_eq!(tokens("aж中", 100), ["^", "a", "ж", "中", "$"]);
+    }
+
+    #[test]
+    fn tokenize_pads_shortened_lowercase_text_with_separators() {
+        // "İ" is two bytes and its lowercase "i" one: the window gains a NUL, a separator.
+        let text = "İz";
+        let lower = lowercase(text);
+        assert_eq!(lower, b"iz");
+        let t = tokenize(&lower, text.len(), 100);
+        assert_eq!(t.text, b"^iz $");
+    }
+
+    #[rstest]
+    #[case::latin_and_cyrillic("hElLo БЙп", "hello бйп")]
+    #[case::digits_and_punctuation("A1!", "a1!")]
+    #[case::caseless("ありがと", "ありがと")]
+    fn lowercase_changes_letters_only(#[case] text: &str, #[case] expected: &str) {
+        assert_eq!(lowercase(text), expected.as_bytes());
+    }
+
+    #[test]
+    fn hash_ignores_letter_case() {
+        assert_eq!(op().hash("HI").unwrap(), op().hash("hi").unwrap());
+    }
+
+    proptest! {
+        #[test]
+        fn tokenize_wraps_characters_in_markers(text in any::<String>(), max_tokens in 2_usize..200) {
+            let tokens = tokens(&text, max_tokens);
+            let characters = text.chars().count().min(max_tokens - 2);
+            prop_assert_eq!(tokens.len(), characters + 2);
+            prop_assert_eq!(tokens.first().map(String::as_str), Some("^"));
+            prop_assert_eq!(tokens.last().map(String::as_str), Some("$"));
+            for (token, c) in tokens[1..=characters].iter().zip(text.chars()) {
+                let expected = if unicode::is_alpha(u32::from(c)) { c.to_string() } else { " ".to_owned() };
+                prop_assert_eq!(token, &expected);
+            }
+        }
+
+        #[test]
+        fn hash_puts_every_ngram_into_its_vocabulary(text in any::<String>()) {
+            let rows = op().hash(&text).unwrap();
+            // Lowercasing changes byte lengths and MediaPipe reads the original byte length of the
+            // lowercased text: a longer character (e.g. "Ⱥ" -> "ⱥ") is cut off, a shorter one
+            // (e.g. Kelvin sign -> "k") leaves NUL separators. Only the byte length bounds tokens.
+            let max_tokens = text.len().min(126) + 2;
+            prop_assert_eq!(rows.len(), 2);
+            prop_assert_eq!(rows[0].len(), rows[1].len());
+            for (row, &(_, vocab)) in rows.iter().zip(op().heads.iter()) {
+                prop_assert!((2..=max_tokens).contains(&row.len()));
+                prop_assert!(row.iter().all(|&id| (1..=vocab).contains(&id)));
+            }
+        }
     }
 }

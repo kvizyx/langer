@@ -1,9 +1,10 @@
 //! Language detectors behind `POST /detect`.
 
+use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
-use langer_mediapipe::Detector;
+use langer_mediapipe::{Detector, PredictError};
 use lingua::LanguageDetector;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -14,11 +15,12 @@ const UNKNOWN: &str = "unknown";
 /// Detection method requested by a client.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
+#[schema(description = "Detection method requested by a client.")]
 pub enum Method {
     /// MediaPipe's language detector (110 languages): small and fast.
     #[default]
-    Mediapipe,
-    /// Lingua in high-accuracy mode (75 languages); most accurate on one or two words.
+    MediaPipe,
+    /// Lingua in high-accuracy mode (75 languages): most accurate on one or two words.
     Lingua,
 }
 
@@ -26,7 +28,7 @@ impl fmt::Display for Method {
     /// Writes the method as it appears in the API, e.g. `mediapipe`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Self::Mediapipe => "mediapipe",
+            Self::MediaPipe => "mediapipe",
             Self::Lingua => "lingua",
         })
     }
@@ -34,6 +36,7 @@ impl fmt::Display for Method {
 
 /// Result of a detection.
 #[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+#[schema(description = "Result of a detection.")]
 pub struct Detection {
     /// Language code. MediaPipe reports its own codes (e.g. `iw`, `fil`, `zh-Latn`) and
     /// `unknown`; Lingua reports ISO 639-1 codes, or `unknown` when it cannot decide.
@@ -71,28 +74,34 @@ impl Detectors {
     /// MediaPipe answers in tens of microseconds. Lingua takes up to a few milliseconds per
     /// text (more while its models are paged in for the first time), so async callers
     /// should run it on a blocking thread.
-    #[must_use]
-    pub fn detect(&self, text: &str, method: Method) -> Detection {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only if MediaPipe fails, which it does not with a valid model.
+    pub fn detect(&self, text: &str, method: Method) -> Result<Detection, DetectError> {
         match method {
-            Method::Mediapipe => self.detect_mediapipe(text),
-            Method::Lingua => self.detect_lingua(text),
+            Method::MediaPipe => self.detect_mediapipe(text),
+            Method::Lingua => Ok(self.detect_lingua(text)),
         }
     }
 
-    fn detect_mediapipe(&self, text: &str) -> Detection {
-        let (language, confidence) = match self.inner.mediapipe.predict(text, 1).first() {
-            Some(p) => (p.language.to_owned(), f64::from(p.probability)),
-            None => (UNKNOWN.to_owned(), 0.0),
-        };
-        Detection {
-            language,
-            confidence: Some(confidence),
-            method: Method::Mediapipe,
-        }
+    fn detect_mediapipe(&self, text: &str) -> Result<Detection, DetectError> {
+        let top = self.inner.mediapipe.predict(text, 1).map_err(|e| DetectError {
+            message: "MediaPipe failed",
+            source: Some(e),
+        })?;
+        let top = top.first().ok_or(DetectError {
+            message: "MediaPipe returned no prediction",
+            source: None,
+        })?;
+        Ok(Detection {
+            language: top.language.to_owned(),
+            confidence: Some(f64::from(top.probability)),
+            method: Method::MediaPipe,
+        })
     }
 
-    /// Lingua's `detect_language_of`, then the confidence of the detected language, exactly
-    /// as the Python service did.
+    /// Lingua's `detect_language_of`, then the confidence of the detected language.
     fn detect_lingua(&self, text: &str) -> Detection {
         let lingua = &self.inner.lingua;
         let (language, confidence) = match lingua.detect_language_of(text) {
@@ -110,6 +119,29 @@ impl Detectors {
     }
 }
 
+/// A detector failed to produce a result.
+#[derive(Debug)]
+pub struct DetectError {
+    message: &'static str,
+    source: Option<PredictError>,
+}
+
+impl fmt::Display for DetectError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "language detection failed: {}", self.message)?;
+        if let Some(source) = &self.source {
+            write!(f, ": {source}")?;
+        }
+        Ok(())
+    }
+}
+
+impl Error for DetectError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source.as_ref().map(|e| e as _)
+    }
+}
+
 impl fmt::Debug for Detectors {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Detectors")
@@ -120,12 +152,12 @@ impl fmt::Debug for Detectors {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::Method;
 
-    #[test]
-    fn method_display_matches_api_names() {
-        for method in [Method::Mediapipe, Method::Lingua] {
-            assert_eq!(serde_json::to_string(&method).unwrap(), format!("\"{method}\""));
-        }
+    #[rstest]
+    fn method_display_matches_api_name(#[values(Method::MediaPipe, Method::Lingua)] method: Method) {
+        assert_eq!(serde_json::to_string(&method).unwrap(), format!("\"{method}\""));
     }
 }

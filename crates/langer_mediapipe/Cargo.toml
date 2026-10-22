@@ -13,8 +13,13 @@ flatbuffers = { workspace = true, features = ["std"] }
 flexbuffers.workspace = true
 zip.workspace = true
 
+[build-dependencies]
+anyhow.workspace = true
+
 [dev-dependencies]
 divan.workspace = true
+proptest.workspace = true
+rstest.workspace = true
 
 [[bench]]
 name = "predict"

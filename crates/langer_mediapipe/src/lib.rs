@@ -15,10 +15,11 @@
 //! ```
 //! use langer_mediapipe::Detector;
 //!
-//! let detector = Detector::new();
-//! let best = detector.predict("Привет, как дела?", 1)[0];
+//! let detector = Detector::new()?;
+//! let best = detector.predict("Привет, как дела?", 1)?[0];
 //! assert_eq!(best.language, "ru");
 //! assert!(best.probability > 0.9);
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
 mod error;
@@ -41,6 +42,6 @@ mod unicode;
 mod schema_generated;
 
 #[doc(inline)]
-pub use error::LoadError;
+pub use error::{LoadError, PredictError};
 #[doc(inline)]
 pub use model::{Detector, Prediction};

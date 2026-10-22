@@ -1,0 +1,13 @@
+---
+source: crates/langer/tests/api.rs
+expression: response
+---
+{
+  "detail": "Body validation failed",
+  "extra": [
+    {
+      "message": "missing field `text` at line 1 column 20"
+    }
+  ],
+  "status_code": 400
+}

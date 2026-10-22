@@ -20,6 +20,6 @@ mod http;
 mod languages;
 
 #[doc(inline)]
-pub use detect::{Detection, Detectors, Method};
+pub use detect::{DetectError, Detection, Detectors, Method};
 #[doc(inline)]
 pub use http::router;

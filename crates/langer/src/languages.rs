@@ -10,6 +10,7 @@ pub(crate) const JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/languages.
 
 /// A language and the methods that can detect it.
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
+#[schema(description = "A language and the methods that can detect it.")]
 pub(crate) struct Language {
     /// ISO 639-1 code.
     #[schema(example = "en")]
@@ -39,7 +40,7 @@ mod tests {
             .collect()
     }
 
-    /// ISO 639-1 code of a MediaPipe label, as mapped by the Python service's language list.
+    /// ISO 639-1 code of a MediaPipe label, as listed in `data/languages.json`.
     fn iso_639_1(label: &str) -> Option<&str> {
         match label.split('-').next()? {
             "unknown" => None,
@@ -50,20 +51,20 @@ mod tests {
     }
 
     #[test]
-    fn list_is_sorted_by_code() {
+    fn languages_are_sorted_by_code() {
         let languages = languages();
         assert!(languages.windows(2).all(|w| w[0].iso_639_1 < w[1].iso_639_1));
     }
 
     #[test]
-    fn mediapipe_languages_match_the_model() {
-        let detector = langer_mediapipe::Detector::new();
+    fn mediapipe_languages_match_model_labels() {
+        let detector = langer_mediapipe::Detector::new().expect("the bundled model loads");
         let model: BTreeSet<String> = detector.labels().filter_map(iso_639_1).map(str::to_owned).collect();
-        assert_eq!(codes(Method::Mediapipe), model, "update data/languages.json");
+        assert_eq!(codes(Method::MediaPipe), model, "update data/languages.json");
     }
 
     #[test]
-    fn lingua_languages_match_the_lingua_crate() {
+    fn lingua_languages_match_lingua_crate() {
         let expected: BTreeSet<String> = lingua::Language::all()
             .iter()
             .map(|l| l.iso_code_639_1().to_string())

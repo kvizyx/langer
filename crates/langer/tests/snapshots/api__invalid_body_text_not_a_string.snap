@@ -1,0 +1,13 @@
+---
+source: crates/langer/tests/api.rs
+expression: response
+---
+{
+  "detail": "Body validation failed",
+  "extra": [
+    {
+      "message": "invalid type: integer `42`, expected a string at line 1 column 11"
+    }
+  ],
+  "status_code": 400
+}

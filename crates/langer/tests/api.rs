@@ -1,5 +1,7 @@
 //! HTTP API behavior, with the bundled MediaPipe model and a small Lingua detector.
 
+#![expect(clippy::expect_used, reason = "test helpers report failures by panicking")]
+
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
@@ -8,12 +10,16 @@ use langer::Detectors;
 use langer_mediapipe::Detector;
 use lingua::Language::{English, French, Russian};
 use lingua::LanguageDetectorBuilder;
+use rstest::rstest;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
 fn app() -> Router {
     let lingua = LanguageDetectorBuilder::from_languages(&[English, French, Russian]).build();
-    langer::router(Detectors::new(Detector::new(), lingua))
+    langer::router(Detectors::new(
+        Detector::new().expect("the bundled model loads"),
+        lingua,
+    ))
 }
 
 async fn send(request: Request<Body>) -> (StatusCode, Vec<u8>) {
@@ -41,7 +47,7 @@ async fn get(uri: &str) -> (StatusCode, Vec<u8>) {
 }
 
 #[tokio::test]
-async fn detects_with_mediapipe_by_default() {
+async fn detect_without_method_uses_mediapipe() {
     let (status, body) = post_detect(r#"{"text": "Привет!!! 123 😀"}"#).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["language"], "ru");
@@ -51,7 +57,7 @@ async fn detects_with_mediapipe_by_default() {
 }
 
 #[tokio::test]
-async fn detects_with_lingua_on_request() {
+async fn detect_with_lingua_method_uses_lingua() {
     let (status, body) = post_detect(r#"{"text": "Это обычное сообщение на русском языке", "method": "lingua"}"#).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["language"], "ru");
@@ -60,62 +66,54 @@ async fn detects_with_lingua_on_request() {
 }
 
 #[tokio::test]
-async fn lingua_reports_unknown_without_words() {
-    let (_, lingua) = post_detect(r#"{"text": "😀 !!! 42", "method": "lingua"}"#).await;
+async fn detect_with_lingua_returns_unknown_without_letters() {
+    let (_, body) = post_detect(r#"{"text": "😀 !!! 42", "method": "lingua"}"#).await;
     assert_eq!(
-        lingua,
+        body,
         json!({"language": "unknown", "confidence": null, "method": "lingua"})
     );
 }
 
 #[tokio::test]
-async fn mediapipe_reports_its_own_codes() {
+async fn detect_with_mediapipe_returns_mediapipe_codes() {
     let (_, body) = post_detect(r#"{"text": "שלום, מה שלומך היום?"}"#).await;
     assert_eq!(body["language"], "iw");
 }
 
+#[rstest]
+#[case::empty("")]
+#[case::spaces("   ")]
+#[case::newlines_and_tabs("\n\t")]
 #[tokio::test]
-async fn rejects_empty_text() {
-    let (status, body) = post_detect(r#"{"text": "   "}"#).await;
+async fn detect_with_blank_text_returns_400(#[case] text: &str) {
+    let (status, body) = post_detect(&json!({ "text": text }).to_string()).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body, json!({"status_code": 400, "detail": "Text cannot be empty"}));
 }
 
+#[rstest]
+#[case::not_json("not_json", "not json")]
+#[case::missing_text("missing_text", r#"{"method": "lingua"}"#)]
+#[case::text_not_a_string("text_not_a_string", r#"{"text": 42}"#)]
+#[case::unknown_method("unknown_method", r#"{"text": "hi", "method": "fasttext"}"#)]
 #[tokio::test]
-async fn rejects_invalid_bodies() {
-    for body in [
-        "not json",
-        r#"{"method": "lingua"}"#,
-        r#"{"text": "hi", "method": "cld3"}"#,
-        r#"{"text": "hi", "method": "fasttext"}"#,
-    ] {
-        let (status, response) = post_detect(body).await;
-        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
-        assert_eq!(response["detail"], "Validation failed for POST /detect", "{body}");
-        assert!(response["extra"][0]["message"].is_string(), "{body}");
-    }
+async fn detect_with_invalid_body_returns_400(#[case] name: &str, #[case] body: &str) {
+    let (status, response) = post_detect(body).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    insta::assert_json_snapshot!(format!("invalid_body_{name}"), response);
 }
 
 #[tokio::test]
-async fn lists_languages_sorted_with_methods() {
+async fn languages_returns_the_language_list() {
     let (status, body) = get("/detect/languages").await;
     assert_eq!(status, StatusCode::OK);
-    let languages: Vec<Value> = serde_json::from_slice(&body).expect("response is a JSON array");
-    let codes: Vec<&str> = languages
-        .iter()
-        .map(|l| l["iso_639_1"].as_str().expect("code is a string"))
-        .collect();
-    assert!(codes.is_sorted());
-    let english = languages
-        .iter()
-        .find(|l| l["iso_639_1"] == "en")
-        .expect("English is listed");
-    assert_eq!(english["name"], "English");
-    assert_eq!(english["methods"], json!(["mediapipe", "lingua"]));
+    let body: Value = serde_json::from_slice(&body).expect("response is JSON");
+    let expected: Value = serde_json::from_str(include_str!("../data/languages.json")).expect("list is JSON");
+    assert_eq!(body, expected);
 }
 
 #[tokio::test]
-async fn reports_health() {
+async fn health_returns_ok() {
     let (status, body) = get("/health").await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
@@ -124,28 +122,31 @@ async fn reports_health() {
     );
 }
 
+#[rstest]
 #[tokio::test]
-async fn serves_api_reference() {
-    for uri in ["/", "/docs"] {
-        let response = app()
-            .oneshot(Request::get(uri).body(Body::empty()).expect("valid"))
-            .await
-            .expect("infallible");
-        assert_eq!(response.status(), StatusCode::FOUND);
-        assert_eq!(response.headers()[header::LOCATION], "/schema");
-    }
+async fn docs_aliases_redirect_to_schema(#[values("/", "/docs")] uri: &str) {
+    let response = app()
+        .oneshot(Request::get(uri).body(Body::empty()).expect("request is valid"))
+        .await
+        .expect("router is infallible");
+    assert_eq!(response.status(), StatusCode::FOUND);
+    assert_eq!(response.headers()[header::LOCATION], "/schema");
+}
 
+#[tokio::test]
+async fn schema_serves_pinned_scalar_with_the_spec() {
     let (status, html) = get("/schema").await;
     assert_eq!(status, StatusCode::OK);
     let html = String::from_utf8_lossy(&html);
     assert!(html.contains("@scalar/api-reference@1.75.1/"), "Scalar is pinned");
-    assert!(html.contains(r#""theme":"fastify""#));
+    assert!(html.contains(r#""theme":"deepSpace""#));
     assert!(html.contains(r#""paths":"#), "the spec is embedded");
+}
 
+#[tokio::test]
+async fn openapi_document_is_unchanged() {
     let (status, spec) = get("/schema/openapi.json").await;
     assert_eq!(status, StatusCode::OK);
     let spec: Value = serde_json::from_slice(&spec).expect("spec is JSON");
-    for path in ["/detect", "/detect/languages", "/health"] {
-        assert!(spec["paths"][path].is_object(), "{path} is documented");
-    }
+    insta::assert_json_snapshot!("openapi", spec);
 }
