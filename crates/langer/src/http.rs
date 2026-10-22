@@ -22,6 +22,9 @@ use crate::languages::{self, Language};
 /// Where the API reference is served; `/` and `/docs` redirect here.
 const DOCS_PATH: &str = "/schema";
 
+/// Page of the API reference: Scalar with the `fastify` theme, pinned to one version.
+const SCALAR_TEMPLATE: &str = include_str!("../assets/scalar.html");
+
 #[derive(OpenApi)]
 #[openapi(
     info(
@@ -51,14 +54,18 @@ pub fn router(detectors: Detectors) -> Router {
 
     let openapi_json = serde_json::to_string(&openapi).expect("OpenAPI document serializes");
 
-    api.merge(Scalar::with_url(DOCS_PATH, openapi).title("Language Detection API"))
-        .route(
-            "/schema/openapi.json",
-            get(|| async move { ([(header::CONTENT_TYPE, "application/json")], openapi_json) }),
-        )
-        .route("/", get(redirect_to_docs))
-        .route("/docs", get(redirect_to_docs))
-        .layer(CorsLayer::permissive())
+    api.merge(
+        Scalar::with_url(DOCS_PATH, openapi)
+            .title("Language Detection API")
+            .custom_html(SCALAR_TEMPLATE),
+    )
+    .route(
+        "/schema/openapi.json",
+        get(|| async move { ([(header::CONTENT_TYPE, "application/json")], openapi_json) }),
+    )
+    .route("/", get(redirect_to_docs))
+    .route("/docs", get(redirect_to_docs))
+    .layer(CorsLayer::permissive())
 }
 
 async fn redirect_to_docs() -> Response {

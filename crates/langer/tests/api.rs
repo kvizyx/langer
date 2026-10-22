@@ -137,7 +137,10 @@ async fn serves_api_reference() {
 
     let (status, html) = get("/schema").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(String::from_utf8_lossy(&html).contains("@scalar/api-reference"));
+    let html = String::from_utf8_lossy(&html);
+    assert!(html.contains("@scalar/api-reference@1.75.1/"), "Scalar is pinned");
+    assert!(html.contains(r#""theme":"fastify""#));
+    assert!(html.contains(r#""paths":"#), "the spec is embedded");
 
     let (status, spec) = get("/schema/openapi.json").await;
     assert_eq!(status, StatusCode::OK);

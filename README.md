@@ -12,6 +12,16 @@ HTTP service that detects the language of short texts such as chat messages.
 The interactive API reference (Scalar) is served at `/schema`, the OpenAPI document at
 `/schema/openapi.json`, `/` and `/docs` redirect to `/schema`.
 
+The page is [`crates/langer/assets/scalar.html`](crates/langer/assets/scalar.html), embedded in the
+executable; utoipa-scalar replaces `$title` and `$spec` in it. The theme is set in
+`data-configuration` ([available themes](https://github.com/scalar/scalar/blob/main/documentation/themes.md)).
+Scalar is loaded from jsDelivr, pinned to one version and checked by subresource integrity. To
+update it, change the version in the URL and replace the `integrity` hash with the output of:
+
+```bash
+curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
+```
+
 ### `POST /detect`
 
 ```json
@@ -167,4 +177,38 @@ cargo bench -p langer_mediapipe
 ```
 
 Builds target `x86-64-v2`, see [`.cargo/config.toml`](.cargo/config.toml). Raise it to `x86-64-v3`
-only if every node supports AVX2 and FMA; inference gets ~25% faster.
+only if every node supports AVX2 and FMA; inference gets ~25% faster. Otherwise the executable
+dies with `SIGILL` on start. To see which levels a machine supports:
+
+```bash
+/lib64/ld-linux-x86-64.so.2 --help | grep x86-64-v
+```
+
+For one build, `RUSTFLAGS` replaces the flags from `.cargo/config.toml`:
+
+```bash
+RUSTFLAGS="-C target-cpu=x86-64-v3" cargo build --release -p langer
+```
+
+```bash
+docker build --build-arg TARGET_CPU=x86-64-v3 -t langer .
+```
+
+## Docker images
+
+CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) checks every push and pull request and
+publishes two `linux/amd64` images to `ghcr.io/kvizyx/langer` on pushes to `main` and `v*` tags:
+
+| tag | CPU level | runs on |
+|---|---|---|
+| `latest`, `1.2.3`, `1.2`, `sha-abc1234` | `x86-64-v2` | any x86-64 server CPU since ~2009 |
+| `latest-avx2`, `1.2.3-avx2`, `1.2-avx2`, `sha-abc1234-avx2` | `x86-64-v3` | AVX2 and FMA: Intel Haswell, AMD Excavator and newer; ~25% faster |
+
+```bash
+docker run --rm -p 3000:3000 ghcr.io/kvizyx/langer:latest
+```
+
+## License
+
+[MIT](LICENSE). Vendored third-party files in `crates/langer_mediapipe/vendor/` keep their own
+license (Apache 2.0), see the [`langer_mediapipe` README](crates/langer_mediapipe/README.md#vendored-files).
