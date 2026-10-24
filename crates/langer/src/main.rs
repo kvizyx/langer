@@ -28,7 +28,7 @@ struct Config {
     log_level: String,
     /// Largest accepted request body, in bytes.
     #[arg(long, env = "MAX_BODY_BYTES", default_value_t = Limits::default().body_bytes)]
-    max_body_bytes: usize,
+    max_body_bytes: NonZeroUsize,
     /// Most `lingua` detections running or queued at once; more get 503. Defaults to four per core.
     #[arg(long, env = "LINGUA_MAX_IN_FLIGHT", default_value_t = Limits::default().lingua_in_flight)]
     lingua_max_in_flight: NonZeroUsize,

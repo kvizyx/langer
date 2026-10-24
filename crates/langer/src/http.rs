@@ -51,12 +51,18 @@ pub struct Limits {
     /// Largest accepted request body, in bytes; larger ones get `413`.
     ///
     /// Detection time grows with the text: about 0.1 s for 64 KiB with `lingua`.
-    pub body_bytes: usize,
+    pub body_bytes: NonZeroUsize,
     /// Most `lingua` detections running or waiting for a thread at once; more get `503`.
     ///
     /// Lingua runs on blocking threads, so this bounds how long a request can wait for one.
     pub lingua_in_flight: NonZeroUsize,
 }
+
+/// Default body limit: far more than any chat message.
+const DEFAULT_BODY_BYTES: NonZeroUsize = match NonZeroUsize::new(64 << 10) {
+    Some(bytes) => bytes,
+    None => NonZeroUsize::MIN,
+};
 
 /// `lingua` detections allowed in flight per CPU core: one running, three waiting.
 const LINGUA_SLOTS_PER_CORE: NonZeroUsize = match NonZeroUsize::new(4) {
@@ -69,7 +75,7 @@ impl Default for Limits {
     fn default() -> Self {
         let cores = thread::available_parallelism().unwrap_or(NonZeroUsize::MIN);
         Self {
-            body_bytes: 64 << 10,
+            body_bytes: DEFAULT_BODY_BYTES,
             lingua_in_flight: cores.saturating_mul(LINGUA_SLOTS_PER_CORE),
         }
     }
@@ -118,7 +124,7 @@ pub fn router(detectors: Detectors, limits: Limits) -> Router {
 /// Adds the layers every response goes through. The last one added runs first, so CORS wraps
 /// everything: its headers are set on every response, including the `500` of a panic.
 fn with_middleware(app: Router, limits: Limits) -> Router {
-    app.layer(DefaultBodyLimit::max(limits.body_bytes))
+    app.layer(DefaultBodyLimit::max(limits.body_bytes.get()))
         .layer(CatchPanicLayer::custom(panic_response))
         .layer(CorsLayer::permissive())
 }

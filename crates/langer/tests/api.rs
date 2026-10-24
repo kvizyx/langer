@@ -19,9 +19,13 @@ use tower::ServiceExt;
 /// Body limit of the test app: small, so that tests stay fast.
 const BODY_LIMIT: usize = 1024;
 
+fn bytes(n: usize) -> NonZeroUsize {
+    NonZeroUsize::new(n).expect("limit is positive")
+}
+
 fn app() -> Router {
     app_with(Limits {
-        body_bytes: BODY_LIMIT,
+        body_bytes: bytes(BODY_LIMIT),
         ..Limits::default()
     })
 }
@@ -208,7 +212,7 @@ async fn detect_with_body_at_the_limit_succeeds() {
 #[tokio::test]
 async fn detect_with_lingua_over_the_in_flight_limit_returns_503() {
     let app = app_with(Limits {
-        body_bytes: 1 << 20,
+        body_bytes: bytes(1 << 20),
         lingua_in_flight: NonZeroUsize::MIN,
     });
     let request = || {
