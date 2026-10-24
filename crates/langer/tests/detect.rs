@@ -7,7 +7,8 @@ use lingua::LanguageDetectorBuilder;
 use proptest::prelude::*;
 use rstest::rstest;
 
-/// Lingua sums probabilities in parallel, so repeated computations differ in the last digits.
+/// Lingua collects probabilities in hash maps created on every call, whose iteration order, and
+/// so the order of the float sums, changes from call to call: results differ in the last digits.
 const LINGUA_TOLERANCE: f64 = 1e-12;
 
 /// Whether two confidences are equal up to [`LINGUA_TOLERANCE`].
