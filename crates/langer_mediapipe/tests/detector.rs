@@ -125,3 +125,21 @@ proptest! {
         prop_assert!(Detector::from_bytes(&MODEL[..len]).is_err());
     }
 }
+
+#[test]
+fn from_bytes_rejects_oversized_labels() {
+    // The model is a flatbuffer followed by a zip archive with the labels: replace the archive.
+    let flatbuffer_len = zip::ZipArchive::new(std::io::Cursor::new(MODEL)).unwrap().offset();
+    let flatbuffer = &MODEL[..usize::try_from(flatbuffer_len).unwrap()];
+
+    let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+    archive.start_file("labels.txt", options).unwrap();
+    std::io::Write::write_all(&mut archive, "xx\n".repeat(40_000).as_bytes()).unwrap();
+    let labels = archive.finish().unwrap().into_inner();
+
+    let model = [flatbuffer, &labels].concat();
+
+    let err = Detector::from_bytes(&model).unwrap_err();
+    assert!(err.to_string().contains("labels.txt is larger than"), "{err}");
+}

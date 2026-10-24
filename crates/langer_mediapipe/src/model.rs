@@ -14,6 +14,10 @@ const BUNDLED_MODEL: &[u8] = include_bytes!("../vendor/model/language_detector.t
 /// File in the zip archive appended to the model that lists the labels, one per line.
 const LABELS_FILE: &str = "labels.txt";
 
+/// Largest `labels.txt` read, far above the ~600 bytes of MediaPipe's: a compressed file in an
+/// untrusted model could otherwise expand to any size.
+const MAX_LABELS_BYTES: u64 = 64 << 10;
+
 /// `NGramHash` default when the op options omit `max_splits`.
 const DEFAULT_MAX_SPLITS: usize = 128;
 
@@ -130,13 +134,19 @@ impl fmt::Debug for Detector {
 fn read_labels(model: &[u8]) -> Result<Box<[Box<str>]>, LoadError> {
     let mut archive =
         zip::ZipArchive::new(Cursor::new(model)).map_err(|e| LoadError::with_source("no labels archive", e))?;
-    let mut file = archive
+    let file = archive
         .by_name(LABELS_FILE)
         .map_err(|e| LoadError::with_source("no labels.txt in the labels archive", e))?;
 
     let mut text = String::new();
-    file.read_to_string(&mut text)
+    file.take(MAX_LABELS_BYTES + 1)
+        .read_to_string(&mut text)
         .map_err(|e| LoadError::with_source("unreadable labels.txt", e))?;
+    if text.len() as u64 > MAX_LABELS_BYTES {
+        return Err(LoadError::new(format!(
+            "labels.txt is larger than {MAX_LABELS_BYTES} bytes"
+        )));
+    }
 
     Ok(text.lines().map(|l| l.trim().into()).collect())
 }
@@ -563,7 +573,7 @@ fn single(vector: Option<flatbuffers::Vector<'_, i32>>, what: &'static str) -> R
 }
 
 fn floats(data: &[u8], len: usize) -> Result<Box<[f32]>, LoadError> {
-    if data.len() != len * 4 {
+    if len.checked_mul(size_of::<f32>()) != Some(data.len()) {
         return Err(LoadError::new("float tensor has the wrong size"));
     }
     Ok(data.as_chunks::<4>().0.iter().map(|&b| f32::from_le_bytes(b)).collect())
