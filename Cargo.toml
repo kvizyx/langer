@@ -21,6 +21,8 @@ flexbuffers = { version = "25.12.19", default-features = false }
 http-body-util = { version = "0.1.5", default-features = false }
 insta = { version = "1.49.0", default-features = false, features = ["json"] }
 lingua = { version = "1.8.0", default-features = false }
+metrics = { version = "0.24.6", default-features = false }
+metrics-exporter-prometheus = { version = "0.18.3", default-features = false }
 proptest = { version = "1.12.0", default-features = false, features = ["std"] }
 rstest = { version = "0.28.0", default-features = false }
 serde = { version = "1.0.229", default-features = false, features = ["std"] }

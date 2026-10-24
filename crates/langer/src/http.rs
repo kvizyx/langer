@@ -2,15 +2,19 @@
 
 use std::any::Any;
 use std::num::NonZeroUsize;
+use std::time::Instant;
 
 use axum::Json;
 use axum::Router;
 use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::{DefaultBodyLimit, MatchedPath, Request, State};
 use axum::http::{HeaderValue, StatusCode, header};
+use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
+use metrics::{counter, histogram};
+use metrics_exporter_prometheus::PrometheusHandle;
 use serde::{Deserialize, Serialize};
 use serde_json::error::Category;
 use tower_http::catch_panic::CatchPanicLayer;
@@ -23,6 +27,7 @@ use utoipa_scalar::Scalar;
 use crate::detect::{Detection, Method};
 use crate::languages::{self, Language};
 use crate::service::{Service, ServiceError};
+use crate::telemetry::{HTTP_REQUEST_DURATION, HTTP_REQUESTS};
 
 /// Where the API reference is served; `/` and `/docs` redirect here.
 const DOCS_PATH: &str = "/schema";
@@ -47,8 +52,9 @@ struct ApiDoc;
 /// the text, about 0.1 s for 64 KiB with `lingua`.
 pub const DEFAULT_BODY_LIMIT: NonZeroUsize = NonZeroUsize::new(64 << 10).expect("64 KiB is not zero");
 
-/// Builds the HTTP API over `service`. Bodies larger than `body_limit` bytes get `413`.
-pub fn router(service: Service, body_limit: NonZeroUsize) -> Router {
+/// Builds the HTTP API over `service`. Bodies larger than `body_limit` bytes get `413`;
+/// `GET /metrics` renders `metrics` (see [`install_metrics`](crate::install_metrics)).
+pub fn router(service: Service, body_limit: NonZeroUsize, metrics: PrometheusHandle) -> Router {
     let (api, openapi) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(detect))
         .routes(routes!(languages))
@@ -86,6 +92,10 @@ pub fn router(service: Service, body_limit: NonZeroUsize) -> Router {
         )
         .route("/", get(redirect_to_docs))
         .route("/docs", get(redirect_to_docs))
+        // Only matched routes, so that unknown paths cannot add metric series; `/metrics` comes
+        // after, so that scrapes are not counted.
+        .route_layer(middleware::from_fn(track_metrics))
+        .route("/metrics", get(move || std::future::ready(metrics_response(&metrics))))
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed);
 
@@ -110,6 +120,34 @@ fn openapi_response(spec: Option<Bytes>) -> Response {
             Vec::new(),
         ),
     }
+}
+
+/// Metrics in the Prometheus text format.
+fn metrics_response(metrics: &PrometheusHandle) -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+        metrics.render(),
+    )
+        .into_response()
+}
+
+/// Counts and times a request to a known route, labelled with the route's pattern.
+async fn track_metrics(request: Request, next: Next) -> Response {
+    let started = Instant::now();
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or_else(String::new, |path| path.as_str().to_owned());
+    // Only the methods the routes accept reach this layer, so the label has few values.
+    let method = request.method().to_string();
+
+    let response = next.run(request).await;
+
+    let status = response.status().as_u16().to_string();
+    counter!(HTTP_REQUESTS, "method" => method.clone(), "route" => route.clone(), "status" => status).increment(1);
+    histogram!(HTTP_REQUEST_DURATION, "method" => method, "route" => route).record(started.elapsed().as_secs_f64());
+
+    response
 }
 
 async fn redirect_to_docs() -> Response {

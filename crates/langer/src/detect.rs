@@ -24,13 +24,21 @@ pub enum Method {
     Lingua,
 }
 
+impl Method {
+    /// The method as it appears in the API, e.g. `mediapipe`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::MediaPipe => "mediapipe",
+            Self::Lingua => "lingua",
+        }
+    }
+}
+
 impl fmt::Display for Method {
     /// Writes the method as it appears in the API, e.g. `mediapipe`.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(match self {
-            Self::MediaPipe => "mediapipe",
-            Self::Lingua => "lingua",
-        })
+        f.write_str(self.as_str())
     }
 }
 

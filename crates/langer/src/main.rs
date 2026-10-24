@@ -12,9 +12,13 @@ use clap::Parser;
 use langer::{Detectors, Service};
 use langer_mediapipe::Detector;
 use lingua::LanguageDetectorBuilder;
+use metrics_exporter_prometheus::PrometheusHandle;
 use tokio::net::TcpListener;
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
+
+/// How often the metrics recorder drains histogram data.
+const METRICS_UPKEEP: Duration = Duration::from_secs(5);
 
 /// Language detection HTTP service.
 #[derive(Debug, Parser)]
@@ -47,6 +51,8 @@ fn main() -> anyhow::Result<()> {
         .with_ansi(std::io::stdout().is_terminal())
         .init();
 
+    // Before the service, which records its first metrics when it is created.
+    let metrics = langer::install_metrics().context("cannot install the metrics recorder")?;
     let service = Service::new(load_detectors()?, config.lingua_max_in_flight);
 
     // Lingua runs on blocking threads; more of them than cores only adds memory and
@@ -60,6 +66,7 @@ fn main() -> anyhow::Result<()> {
             config.port,
             service,
             config.max_body_bytes,
+            metrics,
             Duration::from_secs(config.shutdown_delay_secs),
         ))
 }
@@ -106,7 +113,13 @@ async fn bind(port: u16) -> anyhow::Result<(TcpListener, SocketAddr)> {
     }
 }
 
-async fn serve(port: u16, service: Service, body_limit: NonZeroUsize, shutdown_delay: Duration) -> anyhow::Result<()> {
+async fn serve(
+    port: u16,
+    service: Service,
+    body_limit: NonZeroUsize,
+    metrics: PrometheusHandle,
+    shutdown_delay: Duration,
+) -> anyhow::Result<()> {
     let (listener, addr) = bind(port).await?;
 
     let listener = listener.tap_io(|tcp| {
@@ -118,7 +131,17 @@ async fn serve(port: u16, service: Service, body_limit: NonZeroUsize, shutdown_d
 
     tracing::event!(name: "server.listen.success", Level::INFO, server.address = %addr, "server is listening");
 
-    axum::serve(listener, langer::router(service.clone(), body_limit))
+    // Without the exporter's own HTTP listener, nothing else drains histogram data between scrapes.
+    let upkeep = metrics.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(METRICS_UPKEEP);
+        loop {
+            interval.tick().await;
+            upkeep.run_upkeep();
+        }
+    });
+
+    axum::serve(listener, langer::router(service.clone(), body_limit, metrics))
         .with_graceful_shutdown(shut_down(service, shutdown_delay))
         .await?;
 

@@ -74,6 +74,24 @@ Both answer `{"status": "ok"}` with `200` when all is well.
   moves to other instances first. Load does not affect it: excess `lingua` requests get their
   own `503`.
 
+### `GET /metrics`
+
+Metrics in the Prometheus text format, on the same port:
+
+| metric | type | labels | meaning |
+|---|---|---|---|
+| `langer_detections_total` | counter | `method`, `outcome` | detection requests; `outcome` is `ok`, `invalid_input`, `overloaded` or `failed` |
+| `langer_detection_duration_seconds` | histogram | `method` | time of successful detections |
+| `langer_lingua_slots` | gauge | | `LINGUA_MAX_IN_FLIGHT` |
+| `langer_lingua_slots_in_use` | gauge | | `lingua` detections running or waiting for a thread |
+| `langer_http_requests_total` | counter | `method`, `route`, `status` | requests to known routes |
+| `langer_http_request_duration_seconds` | histogram | `method`, `route` | time to answer them |
+
+`route` is the route's pattern (`/detect`), so that unknown paths and scrapes of `/metrics` add
+no series. Histogram buckets go from 10 µs (`mediapipe`) to 2.5 s (`lingua` on long texts).
+`langer_lingua_slots_in_use` close to `langer_lingua_slots`, or a growing count of `overloaded`,
+means `lingua` needs more CPU or a higher `LINGUA_MAX_IN_FLIGHT`.
+
 ## Configuration
 
 | env | default | description |
@@ -149,7 +167,7 @@ between runs on the test machine (WSL).
 | scenario | text | RSS | requests/s | p99 |
 |---|---|---:|---:|---:|
 | idle | | 6 MiB | — | — |
-| `mediapipe`, 50 connections | `Привет, как дела?` | 8 MiB | 16k–17k | 6 ms |
+| `mediapipe`, 50 connections | `Привет, как дела?` | 10 MiB | 16k–17k | 6 ms |
 | `lingua`, 8 connections | `Привет, как дела? Это обычное сообщение.` | 25 MiB | 4.3k–4.8k | 3–4 ms |
 | `lingua`, 8 connections | `Hello, how are you?` | 94 MiB | ~2.1k | 9 ms |
 | `lingua`, 8 connections | `hello there, how are you doing today` | 110 MiB | ~950 | 15 ms |

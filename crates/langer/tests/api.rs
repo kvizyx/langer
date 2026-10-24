@@ -3,6 +3,7 @@
 #![expect(clippy::expect_used, reason = "test helpers report failures by panicking")]
 
 use std::num::NonZeroUsize;
+use std::sync::OnceLock;
 
 use axum::Router;
 use axum::body::Body;
@@ -12,6 +13,7 @@ use langer::{Detectors, Service};
 use langer_mediapipe::Detector;
 use lingua::Language::{English, French, Russian};
 use lingua::LanguageDetectorBuilder;
+use metrics_exporter_prometheus::PrometheusHandle;
 use rstest::rstest;
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -30,8 +32,21 @@ fn service(lingua_in_flight: NonZeroUsize) -> Service {
     Service::new(detectors, lingua_in_flight)
 }
 
+/// The metrics recorder of the test process: there can be only one.
+fn metrics() -> PrometheusHandle {
+    static METRICS: OnceLock<PrometheusHandle> = OnceLock::new();
+
+    METRICS
+        .get_or_init(|| langer::install_metrics().expect("the recorder installs once"))
+        .clone()
+}
+
 fn app() -> Router {
-    langer::router(service(langer::default_lingua_in_flight()), bytes(BODY_LIMIT))
+    langer::router(
+        service(langer::default_lingua_in_flight()),
+        bytes(BODY_LIMIT),
+        metrics(),
+    )
 }
 
 /// Status and body of `request` sent to `app`.
@@ -169,7 +184,7 @@ async fn ready_returns_ok_while_serving() {
 #[tokio::test]
 async fn ready_returns_503_while_shutting_down_but_detection_still_works() {
     let service = service(langer::default_lingua_in_flight());
-    let app = langer::router(service.clone(), langer::DEFAULT_BODY_LIMIT);
+    let app = langer::router(service.clone(), langer::DEFAULT_BODY_LIMIT, metrics());
 
     service.shut_down();
 
@@ -259,7 +274,7 @@ async fn detect_with_body_at_the_limit_succeeds() {
 
 #[tokio::test]
 async fn detect_with_lingua_over_the_in_flight_limit_returns_503() {
-    let app = langer::router(service(NonZeroUsize::MIN), bytes(1 << 20));
+    let app = langer::router(service(NonZeroUsize::MIN), bytes(1 << 20), metrics());
     let request = || {
         let body = json!({ "text": "Это обычное сообщение на русском языке. ".repeat(500), "method": "lingua" });
         Request::post("/detect")
@@ -273,4 +288,41 @@ async fn detect_with_lingua_over_the_in_flight_limit_returns_503() {
     assert_eq!(second.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(second.headers()[header::RETRY_AFTER], "1");
     assert_eq!(second.headers()[header::CACHE_CONTROL], "no-store");
+}
+
+#[tokio::test]
+async fn metrics_count_detections_and_requests_but_not_scrapes() {
+    let (status, _) = post_detect(r#"{"text": "Привет"}"#).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let response = app()
+        .oneshot(Request::get("/metrics").body(Body::empty()).expect("request is valid"))
+        .await
+        .expect("router is infallible");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()[header::CONTENT_TYPE],
+        "text/plain; version=0.0.4; charset=utf-8"
+    );
+
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body is readable")
+        .to_bytes();
+    let metrics = String::from_utf8_lossy(&body);
+    assert!(
+        metrics.contains(r#"langer_detections_total{method="mediapipe",outcome="ok"}"#),
+        "{metrics}"
+    );
+    assert!(
+        metrics.contains(r#"langer_http_requests_total{method="POST",route="/detect",status="200"}"#),
+        "{metrics}"
+    );
+    assert!(
+        metrics.contains("# TYPE langer_detection_duration_seconds histogram"),
+        "{metrics}"
+    );
+    assert!(!metrics.contains(r#"route="/metrics""#), "{metrics}");
 }

@@ -9,9 +9,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use tokio::sync::Semaphore;
+use metrics::{counter, gauge, histogram};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::detect::{Detection, Detectors, Method};
+use crate::telemetry::{DETECTION_DURATION, DETECTIONS, LINGUA_SLOTS, LINGUA_SLOTS_IN_USE};
 
 /// `lingua` detections allowed in flight per CPU core: one running, three waiting.
 const LINGUA_SLOTS_PER_CORE: NonZeroUsize = NonZeroUsize::new(4).expect("4 is not zero");
@@ -49,6 +51,9 @@ impl Service {
     /// thread at once; more are refused as overloaded rather than queued without bound.
     #[must_use]
     pub fn new(detectors: Detectors, lingua_in_flight: NonZeroUsize) -> Self {
+        #[expect(clippy::cast_precision_loss, reason = "a slot count is far below 2^52")]
+        gauge!(LINGUA_SLOTS).set(lingua_in_flight.get() as f64);
+
         Self {
             inner: Arc::new(Inner {
                 detectors,
@@ -71,6 +76,7 @@ impl Service {
     /// ([`ServiceError::is_unavailable`]), or if the detection itself fails.
     pub async fn detect(&self, text: String, method: Method) -> Result<Detection, ServiceError> {
         if text.trim().is_empty() {
+            count(method, "invalid_input");
             return Err(ServiceError::new(ErrorKind::EmptyText));
         }
 
@@ -80,12 +86,13 @@ impl Service {
         let detection = match method {
             Method::MediaPipe => self.inner.detectors.detect(&text, method).map_err(|e| e.to_string()),
             Method::Lingua => {
-                let Ok(slot) = Arc::clone(&self.inner.lingua_slots).try_acquire_owned() else {
+                let Some(slot) = LinguaSlot::take(&self.inner.lingua_slots) else {
                     tracing::event!(
                         name: "detect.lingua.overloaded",
                         tracing::Level::WARN,
                         "too many lingua detections at once",
                     );
+                    count(method, "overloaded");
                     return Err(ServiceError::new(ErrorKind::Overloaded));
                 };
 
@@ -110,10 +117,15 @@ impl Service {
                     error.message = message,
                     "language detection failed",
                 );
+                count(method, "failed");
 
                 return Err(ServiceError::with_details(ErrorKind::DetectionFailed, message));
             }
         };
+
+        let elapsed = started.elapsed();
+        count(method, "ok");
+        histogram!(DETECTION_DURATION, "method" => method.as_str()).record(elapsed.as_secs_f64());
 
         tracing::event!(
             name: "detect.request.success",
@@ -122,7 +134,7 @@ impl Service {
             detect.language = %detection.language,
             detect.confidence = detection.confidence,
             text.length = text_len,
-            duration_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
+            duration_us = u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX),
             "detected language",
         );
 
@@ -162,6 +174,32 @@ impl Service {
     /// detections are still served.
     pub fn shut_down(&self) {
         self.inner.shutting_down.store(true, Ordering::Relaxed);
+    }
+}
+
+/// Counts a detection request by method and outcome.
+fn count(method: Method, outcome: &'static str) {
+    counter!(DETECTIONS, "method" => method.as_str(), "outcome" => outcome).increment(1);
+}
+
+/// A taken `lingua` slot, counted in [`LINGUA_SLOTS_IN_USE`] until it is dropped.
+struct LinguaSlot {
+    _permit: OwnedSemaphorePermit,
+}
+
+impl LinguaSlot {
+    /// Takes a free slot, if any, without waiting.
+    fn take(slots: &Arc<Semaphore>) -> Option<Self> {
+        let permit = Arc::clone(slots).try_acquire_owned().ok()?;
+        gauge!(LINGUA_SLOTS_IN_USE).increment(1.0);
+
+        Some(Self { _permit: permit })
+    }
+}
+
+impl Drop for LinguaSlot {
+    fn drop(&mut self) {
+        gauge!(LINGUA_SLOTS_IN_USE).decrement(1.0);
     }
 }
 
