@@ -398,14 +398,17 @@ impl<'a> Graph<'a> {
         };
 
         let codes: Box<[u8]> = codes_data.into();
-        if codes.len() != ids * codes_per_id || codes_per_id == 0 || block == 0 {
+        if ids.checked_mul(codes_per_id) != Some(codes.len()) || codes_per_id == 0 || block == 0 {
             return Err(LoadError::new("embedding code table has the wrong size"));
         }
         if codes.iter().any(|&c| usize::from(c) >= centroids) {
             return Err(LoadError::new("embedding code out of the codebook"));
         }
 
-        let codebook = floats(book_data, centroids * block)?;
+        let codebook_len = centroids
+            .checked_mul(block)
+            .ok_or_else(|| LoadError::new("embedding codebook is too large"))?;
+        let codebook = floats(book_data, codebook_len)?;
 
         Ok(KmeansEmbedding {
             codes,
@@ -443,6 +446,10 @@ impl<'a> Graph<'a> {
         };
         if width != inputs || outputs.checked_mul(inputs) != Some(data.len()) {
             return Err(LoadError::new("FullyConnected weights do not match the input"));
+        }
+        // Weights are split into rows by the input count.
+        if inputs == 0 {
+            return Err(LoadError::new("FullyConnected has no inputs"));
         }
         if inputs > MAX_DENSE_INPUTS {
             return Err(LoadError::new(format!(
