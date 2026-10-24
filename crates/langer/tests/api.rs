@@ -34,8 +34,8 @@ fn app() -> Router {
     langer::router(service(langer::default_lingua_in_flight()), bytes(BODY_LIMIT))
 }
 
-/// Status and JSON body of `request` sent to `app`.
-async fn call(app: Router, request: Request<Body>) -> (StatusCode, Value) {
+/// Status and body of `request` sent to `app`.
+async fn send_to(app: Router, request: Request<Body>) -> (StatusCode, Vec<u8>) {
     let response = app.oneshot(request).await.expect("router is infallible");
     let status = response.status();
     let body = response
@@ -45,31 +45,26 @@ async fn call(app: Router, request: Request<Body>) -> (StatusCode, Value) {
         .expect("body is readable")
         .to_bytes();
 
-    (status, serde_json::from_slice(&body).expect("response is JSON"))
+    (status, body.to_vec())
 }
 
-async fn send(request: Request<Body>) -> (StatusCode, Vec<u8>) {
-    let response = app().oneshot(request).await.expect("router is infallible");
-    let status = response.status();
-    let body = response
-        .into_body()
-        .collect()
-        .await
-        .expect("body is readable")
-        .to_bytes();
-    (status, body.to_vec())
+/// Status and JSON body of `request` sent to `app`.
+async fn call(app: Router, request: Request<Body>) -> (StatusCode, Value) {
+    let (status, body) = send_to(app, request).await;
+
+    (status, serde_json::from_slice(&body).expect("response is JSON"))
 }
 
 async fn post_detect(body: &str) -> (StatusCode, Value) {
     let request = Request::post("/detect")
         .body(Body::from(body.to_owned()))
         .expect("request is valid");
-    let (status, body) = send(request).await;
-    (status, serde_json::from_slice(&body).expect("response is JSON"))
+
+    call(app(), request).await
 }
 
 async fn get(uri: &str) -> (StatusCode, Vec<u8>) {
-    send(Request::get(uri).body(Body::empty()).expect("request is valid")).await
+    send_to(app(), Request::get(uri).body(Body::empty()).expect("request is valid")).await
 }
 
 #[tokio::test]
