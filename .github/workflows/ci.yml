@@ -34,6 +34,17 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo test --workspace --locked
 
+  # Advisories, licenses and sources of dependencies, see deny.toml. Separate from `check` and
+  # not required by `image`: a new advisory must not block shipping an unrelated fix.
+  deny:
+    name: Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+
   image:
     name: Image (${{ matrix.target_cpu }})
     needs: check

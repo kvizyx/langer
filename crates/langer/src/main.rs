@@ -82,11 +82,11 @@ async fn serve(port: u16, detectors: Detectors, limits: Limits) -> anyhow::Resul
                 tracing::event!(name: "server.nodelay.failure", Level::WARN, error.message = %e, "cannot set TCP_NODELAY");
             }
         });
-    tracing::event!(name: "server.listen.success", Level::INFO, server.address = %addr, "listening");
+    tracing::event!(name: "server.listen.success", Level::INFO, server.address = %addr, "server is listening");
     axum::serve(listener, langer::router(detectors, limits))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
-    tracing::event!(name: "server.shutdown.success", Level::INFO, "stopped");
+    tracing::event!(name: "server.shutdown.success", Level::INFO, "server is stopped");
     Ok(())
 }
 

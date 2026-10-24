@@ -1,0 +1,31 @@
+# Dependency checks with cargo-deny (https://embarkstudios.github.io/cargo-deny/), run in CI:
+# security advisories, licenses, duplicate or wildcard versions and crate sources.
+
+[graph]
+# Only the platform the service is built for.
+targets = ["x86_64-unknown-linux-gnu"]
+
+[advisories]
+# RustSec advisories: vulnerable, unsound and unmaintained crates fail the check, as do
+# yanked versions.
+yanked = "deny"
+
+[licenses]
+# Licenses compatible with distributing the service under MIT.
+allow = [
+    "Apache-2.0",
+    "BSD-3-Clause",
+    "MIT",
+    "Unicode-3.0",
+]
+
+[bans]
+# Transitive duplicates (e.g. several `hashbrown` versions) are outside our control.
+multiple-versions = "allow"
+wildcards = "deny"
+# The workspace's own path dependencies.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

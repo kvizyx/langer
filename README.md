@@ -199,6 +199,18 @@ RUSTFLAGS="-C target-cpu=x86-64-v3" cargo build --release -p langer
 docker build --build-arg TARGET_CPU=x86-64-v3 -t langer .
 ```
 
+## Dependencies
+
+[cargo-deny](https://embarkstudios.github.io/cargo-deny/) checks dependencies in CI against
+RustSec advisories, allowed licenses and crate sources ([`deny.toml`](deny.toml)); locally:
+
+```bash
+cargo deny check
+```
+
+[Dependabot](.github/dependabot.yml) opens weekly pull requests updating crates, base image
+digests and actions.
+
 ## Docker images
 
 CI ([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) checks every push and pull request and
