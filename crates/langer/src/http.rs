@@ -1,6 +1,9 @@
 //! HTTP routes, request handling and the `OpenAPI` document.
 
 use std::any::Any;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::thread;
 use std::time::Instant;
 
 use axum::Json;
@@ -8,10 +11,11 @@ use axum::Router;
 use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
 use axum::extract::{DefaultBodyLimit, State};
-use axum::http::{StatusCode, header};
+use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use serde::{Deserialize, Serialize};
+use tokio::sync::Semaphore;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::CorsLayer;
 use utoipa::{OpenApi, ToSchema};
@@ -45,12 +49,35 @@ pub struct Limits {
     ///
     /// Detection time grows with the text: about 0.1 s for 64 KiB with `lingua`.
     pub body_bytes: usize,
+    /// Most `lingua` detections running or waiting for a thread at once; more get `503`.
+    ///
+    /// Lingua runs on blocking threads, so this bounds how long a request can wait for one.
+    pub lingua_in_flight: NonZeroUsize,
 }
 
+/// `lingua` detections allowed in flight per CPU core: one running, three waiting.
+const LINGUA_SLOTS_PER_CORE: NonZeroUsize = match NonZeroUsize::new(4) {
+    Some(slots) => slots,
+    None => NonZeroUsize::MIN,
+};
+
 impl Default for Limits {
+    /// 64 KiB bodies and [`LINGUA_SLOTS_PER_CORE`] `lingua` detections per CPU core.
     fn default() -> Self {
-        Self { body_bytes: 64 << 10 }
+        let cores = thread::available_parallelism().unwrap_or(NonZeroUsize::MIN);
+        Self {
+            body_bytes: 64 << 10,
+            lingua_in_flight: cores.saturating_mul(LINGUA_SLOTS_PER_CORE),
+        }
     }
+}
+
+/// State shared by the request handlers.
+#[derive(Clone, Debug)]
+struct AppState {
+    detectors: Detectors,
+    /// One permit per `lingua` detection allowed in flight.
+    lingua_slots: Arc<Semaphore>,
 }
 
 /// Builds the application router.
@@ -59,7 +86,10 @@ pub fn router(detectors: Detectors, limits: Limits) -> Router {
         .routes(routes!(detect))
         .routes(routes!(languages))
         .routes(routes!(health))
-        .with_state(detectors)
+        .with_state(AppState {
+            detectors,
+            lingua_slots: Arc::new(Semaphore::new(limits.lingua_in_flight.get())),
+        })
         .split_for_parts();
 
     let spec = openapi.clone();
@@ -141,6 +171,24 @@ fn panic_response(panic: Box<dyn Any + Send + 'static>) -> Response {
     error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error", Vec::new())
 }
 
+/// `503` for a `lingua` request beyond [`Limits::lingua_in_flight`].
+fn overloaded() -> Response {
+    tracing::event!(
+        name: "detect.lingua.overloaded",
+        tracing::Level::WARN,
+        "too many lingua detections at once",
+    );
+    let mut response = error(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "Too many lingua detections at once, retry later",
+        Vec::new(),
+    );
+    response
+        .headers_mut()
+        .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+    response
+}
+
 fn error(status: StatusCode, detail: impl Into<String>, extra: Vec<ErrorExtra>) -> Response {
     let body = ErrorBody {
         status_code: status.as_u16(),
@@ -163,9 +211,10 @@ fn error(status: StatusCode, detail: impl Into<String>, extra: Vec<ErrorExtra>) 
         (status = 400, description = "Invalid body or empty text", body = ErrorBody),
         (status = 413, description = "Body larger than the limit", body = ErrorBody),
         (status = 500, description = "Detection failed", body = ErrorBody),
+        (status = 503, description = "Too many `lingua` detections at once; retry later", body = ErrorBody),
     )
 )]
-async fn detect(State(detectors): State<Detectors>, body: Result<Bytes, BytesRejection>) -> Response {
+async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejection>) -> Response {
     let body = match body {
         Ok(body) => body,
         Err(rejection) => {
@@ -190,11 +239,21 @@ async fn detect(State(detectors): State<Detectors>, body: Result<Bytes, BytesRej
     let text_len = request.text.chars().count();
     let method = request.method;
     let detection = match method {
-        Method::MediaPipe => detectors.detect(&request.text, method).map_err(|e| e.to_string()),
-        Method::Lingua => tokio::task::spawn_blocking(move || detectors.detect(&request.text, method))
+        Method::MediaPipe => state.detectors.detect(&request.text, method).map_err(|e| e.to_string()),
+        Method::Lingua => {
+            let Ok(slot) = Arc::clone(&state.lingua_slots).try_acquire_owned() else {
+                return overloaded();
+            };
+            let detectors = state.detectors;
+            tokio::task::spawn_blocking(move || {
+                // Released when the detection ends, even if the client is gone by then.
+                let _slot = slot;
+                detectors.detect(&request.text, method)
+            })
             .await
             .map_err(|e| e.to_string())
-            .and_then(|result| result.map_err(|e| e.to_string())),
+            .and_then(|result| result.map_err(|e| e.to_string()))
+        }
     };
     let detection = match detection {
         Ok(detection) => detection,

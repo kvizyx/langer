@@ -202,6 +202,16 @@ expression: spec
               }
             },
             "description": "Detection failed"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Too many `lingua` detections at once; retry later"
           }
         },
         "summary": "Detect the language of a text",

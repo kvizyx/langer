@@ -2,6 +2,7 @@
 
 use std::io::IsTerminal;
 use std::net::{Ipv4Addr, SocketAddr};
+use std::num::NonZeroUsize;
 use std::thread;
 use std::time::Instant;
 
@@ -24,6 +25,9 @@ struct Config {
     /// Largest accepted request body, in bytes.
     #[arg(long, env = "MAX_BODY_BYTES", default_value_t = Limits::default().body_bytes)]
     max_body_bytes: usize,
+    /// Most `lingua` detections running or queued at once; more get 503. Defaults to four per core.
+    #[arg(long, env = "LINGUA_MAX_IN_FLIGHT", default_value_t = Limits::default().lingua_in_flight)]
+    lingua_max_in_flight: NonZeroUsize,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -47,6 +51,7 @@ fn main() -> anyhow::Result<()> {
             detectors,
             Limits {
                 body_bytes: config.max_body_bytes,
+                lingua_in_flight: config.lingua_max_in_flight,
             },
         ))
 }

@@ -2,6 +2,8 @@
 
 #![expect(clippy::expect_used, reason = "test helpers report failures by panicking")]
 
+use std::num::NonZeroUsize;
+
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
@@ -18,10 +20,17 @@ use tower::ServiceExt;
 const BODY_LIMIT: usize = 1024;
 
 fn app() -> Router {
+    app_with(Limits {
+        body_bytes: BODY_LIMIT,
+        ..Limits::default()
+    })
+}
+
+fn app_with(limits: Limits) -> Router {
     let lingua = LanguageDetectorBuilder::from_languages(&[English, French, Russian]).build();
     langer::router(
         Detectors::new(Detector::new().expect("the bundled model loads"), lingua),
-        Limits { body_bytes: BODY_LIMIT },
+        limits,
     )
 }
 
@@ -193,4 +202,24 @@ async fn detect_with_body_at_the_limit_succeeds() {
     // `{"text":"…"}` takes 11 bytes besides the text.
     let (status, _) = post_detect(&json!({ "text": "a".repeat(BODY_LIMIT - 11) }).to_string()).await;
     assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+async fn detect_with_lingua_over_the_in_flight_limit_returns_503() {
+    let app = app_with(Limits {
+        body_bytes: 1 << 20,
+        lingua_in_flight: NonZeroUsize::MIN,
+    });
+    let request = || {
+        let body = json!({ "text": "Это обычное сообщение на русском языке. ".repeat(500), "method": "lingua" });
+        Request::post("/detect")
+            .body(Body::from(body.to_string()))
+            .expect("request is valid")
+    };
+    // The first request takes the only slot before the second one is polled.
+    let (first, second) = tokio::join!(app.clone().oneshot(request()), app.oneshot(request()));
+    assert_eq!(first.expect("router is infallible").status(), StatusCode::OK);
+    let second = second.expect("router is infallible");
+    assert_eq!(second.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(second.headers()[header::RETRY_AFTER], "1");
 }
