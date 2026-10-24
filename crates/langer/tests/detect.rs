@@ -41,6 +41,8 @@ fn lingua_reference(lingua: &lingua::LanguageDetector, text: &str) -> (String, O
 #[case::chat("gg wp")]
 #[case::no_letters("😀 !!! 42")]
 #[case::mixed("Hello, как дела? Wie geht's?")]
+// Found by proptest: confidences that differ from the reference in the last digits.
+#[case::random_unicode("🕴𝋥kﭻÊ*.ࡀ:൵'\"`𫟒໖ቘ𞗿ࢩ.𑎎s᳀Ⴧ8<T£𐬾")]
 fn detect_with_lingua_matches_lingua_reference(#[case] text: &str) {
     let lingua = LanguageDetectorBuilder::from_all_languages().build();
     let expected = lingua_reference(&lingua, text);

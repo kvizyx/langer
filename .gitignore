@@ -13,6 +13,7 @@ target
 
 # Failure seeds saved by proptest: found cases become explicit tests instead
 proptest-regressions/
+*.proptest-regressions
 
 # Rustc will dump stack traces when hitting an internal compiler error to PWD
 rustc-ice-*.txt

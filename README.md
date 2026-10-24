@@ -235,7 +235,7 @@ The tests include:
 
 - property tests ([proptest](https://proptest-rs.github.io/proptest/)) on random input. A case
   proptest finds goes into an explicit, named test next to the property; the seeds it saves to
-  `proptest-regressions/` stay local (ignored by git);
+  `proptest-regressions/` and `*.proptest-regressions` stay local (ignored by git);
 - snapshots ([insta](https://insta.rs)) of error bodies and the OpenAPI document in
   `crates/langer/tests/snapshots/`. After an intended change, review and accept them with
   [`cargo-insta`](https://insta.rs/docs/cli/):
