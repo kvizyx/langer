@@ -28,7 +28,7 @@ expression: spec
         "description": "Result of a detection.",
         "properties": {
           "confidence": {
-            "description": "Confidence in `0.0..=1.0`; `null` when Lingua cannot decide.",
+            "description": "Confidence in `0.0..=1.0`; `null` with `und`.",
             "example": 0.97,
             "format": "double",
             "type": [

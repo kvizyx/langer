@@ -105,10 +105,11 @@ async fn detect_with_lingua_method_uses_lingua() {
     assert!(body["confidence"].as_f64().is_some_and(|c| c > 0.5), "{body}");
 }
 
+#[rstest]
 #[tokio::test]
-async fn detect_with_lingua_returns_und_without_letters() {
-    let (_, body) = post_detect(r#"{"text": "😀 !!! 42", "method": "lingua"}"#).await;
-    assert_eq!(body, json!({"language": "und", "confidence": null, "method": "lingua"}));
+async fn detect_returns_und_without_letters(#[values("mediapipe", "lingua")] method: &str) {
+    let (_, body) = post_detect(&json!({ "text": "😀 !!! 42", "method": method }).to_string()).await;
+    assert_eq!(body, json!({"language": "und", "confidence": null, "method": method}));
 }
 
 #[tokio::test]

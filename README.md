@@ -39,7 +39,10 @@ curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
   the ISO 639-3 one (`ceb`). `mediapipe` also reports romanized text with a script subtag
   (`ru-Latn`). Norwegian is `no` and Filipino is `tl` for both methods. `und` means that no
   language was detected.
-- `confidence` is a number in `0..=1`; for `lingua` it is `null` when Lingua cannot decide.
+- `confidence` is a number in `0..=1`, or `null` with `und`.
+- Text without letters (only emoji, digits, punctuation) is `und` for both methods. With letters,
+  `und` means that the method could not decide: Lingua found no clear winner, or MediaPipe's
+  model chose its `unknown` label.
 - Body that is not valid JSON: `400` with `"detail": "Body is not valid JSON"`.
 - Valid JSON with a missing `text`, a field of the wrong type, an unknown `method` or unknown
   fields: `422` with `"detail": "Body validation failed"`. Both give the reason in `extra`.

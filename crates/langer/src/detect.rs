@@ -51,7 +51,7 @@ pub struct Detection {
     /// romanized text (`ru-Latn`, `mediapipe` only); `und` when no language is detected.
     #[schema(example = "en")]
     pub language: String,
-    /// Confidence in `0.0..=1.0`; `null` when Lingua cannot decide.
+    /// Confidence in `0.0..=1.0`; `null` with `und`.
     #[schema(example = 0.97)]
     pub confidence: Option<f64>,
     /// Method that produced the result.
@@ -78,7 +78,8 @@ impl Detectors {
         }
     }
 
-    /// Detects the language of `text` with `method`.
+    /// Detects the language of `text` with `method`: `und` if it has no letters, as only emoji,
+    /// digits or punctuation do.
     ///
     /// MediaPipe answers in tens of microseconds. Lingua takes up to a few milliseconds per
     /// text (more while its models are paged in for the first time), so async callers
@@ -88,6 +89,15 @@ impl Detectors {
     ///
     /// Returns an error only if MediaPipe fails, which it does not with a valid model.
     pub fn detect(&self, text: &str, method: Method) -> Result<Detection, DetectError> {
+        // MediaPipe guesses a language for any text, Lingua only with letters of its languages.
+        if !text.chars().any(char::is_alphabetic) {
+            return Ok(Detection {
+                language: UNDETERMINED.to_owned(),
+                confidence: None,
+                method,
+            });
+        }
+
         match method {
             Method::MediaPipe => self.detect_mediapipe(text),
             Method::Lingua => Ok(self.detect_lingua(text)),
@@ -105,9 +115,13 @@ impl Detectors {
             source: None,
         })?;
 
+        // The model's own `unknown` label is no language, so it has no confidence either.
+        let language = tag(top.language);
+        let confidence = (language != UNDETERMINED).then(|| widen(top.probability));
+
         Ok(Detection {
-            language: tag(top.language).to_owned(),
-            confidence: Some(widen(top.probability)),
+            language: language.to_owned(),
+            confidence,
             method: Method::MediaPipe,
         })
     }
