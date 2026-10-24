@@ -8,7 +8,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
-use langer::{Detectors, Limits, Readiness};
+use langer::{Detectors, Service};
 use langer_mediapipe::Detector;
 use lingua::Language::{English, French, Russian};
 use lingua::LanguageDetectorBuilder;
@@ -23,24 +23,15 @@ fn bytes(n: usize) -> NonZeroUsize {
     NonZeroUsize::new(n).expect("limit is positive")
 }
 
-fn app() -> Router {
-    app_with(Limits {
-        body_bytes: bytes(BODY_LIMIT),
-        ..Limits::default()
-    })
-}
-
-fn app_with(limits: Limits) -> Router {
-    app_with_readiness(limits, Readiness::default())
-}
-
-fn app_with_readiness(limits: Limits, readiness: Readiness) -> Router {
+fn service(lingua_in_flight: NonZeroUsize) -> Service {
     let lingua = LanguageDetectorBuilder::from_languages(&[English, French, Russian]).build();
-    langer::router(
-        Detectors::new(Detector::new().expect("the bundled model loads"), lingua),
-        limits,
-        readiness,
-    )
+    let detectors = Detectors::new(Detector::new().expect("the bundled model loads"), lingua);
+
+    Service::new(detectors, lingua_in_flight)
+}
+
+fn app() -> Router {
+    langer::router(service(langer::default_lingua_in_flight()), bytes(BODY_LIMIT))
 }
 
 /// Status and JSON body of `request` sent to `app`.
@@ -182,10 +173,10 @@ async fn ready_returns_ok_while_serving() {
 
 #[tokio::test]
 async fn ready_returns_503_while_shutting_down_but_detection_still_works() {
-    let readiness = Readiness::default();
-    let app = app_with_readiness(Limits::default(), readiness.clone());
+    let service = service(langer::default_lingua_in_flight());
+    let app = langer::router(service.clone(), langer::DEFAULT_BODY_LIMIT);
 
-    readiness.shut_down();
+    service.shut_down();
 
     let ready = Request::get("/health/ready")
         .body(Body::empty())
@@ -273,10 +264,7 @@ async fn detect_with_body_at_the_limit_succeeds() {
 
 #[tokio::test]
 async fn detect_with_lingua_over_the_in_flight_limit_returns_503() {
-    let app = app_with(Limits {
-        body_bytes: bytes(1 << 20),
-        lingua_in_flight: NonZeroUsize::MIN,
-    });
+    let app = langer::router(service(NonZeroUsize::MIN), bytes(1 << 20));
     let request = || {
         let body = json!({ "text": "Это обычное сообщение на русском языке. ".repeat(500), "method": "lingua" });
         Request::post("/detect")

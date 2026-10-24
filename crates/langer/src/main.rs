@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use axum::serve::ListenerExt;
 use clap::Parser;
-use langer::{Detectors, Limits, Readiness};
+use langer::{Detectors, Service};
 use langer_mediapipe::Detector;
 use lingua::LanguageDetectorBuilder;
 use tokio::net::TcpListener;
@@ -27,10 +27,10 @@ struct Config {
     #[arg(long, env = "LOG_LEVEL", default_value = "info")]
     log_level: String,
     /// Largest accepted request body, in bytes.
-    #[arg(long, env = "MAX_BODY_BYTES", default_value_t = Limits::default().body_bytes)]
+    #[arg(long, env = "MAX_BODY_BYTES", default_value_t = langer::DEFAULT_BODY_LIMIT)]
     max_body_bytes: NonZeroUsize,
     /// Most `lingua` detections running or queued at once; more get 503. Defaults to four per core.
-    #[arg(long, env = "LINGUA_MAX_IN_FLIGHT", default_value_t = Limits::default().lingua_in_flight)]
+    #[arg(long, env = "LINGUA_MAX_IN_FLIGHT", default_value_t = langer::default_lingua_in_flight())]
     lingua_max_in_flight: NonZeroUsize,
     /// Seconds between a stop signal and closing the listener, while `GET /health/ready` answers
     /// 503 and requests are still served.
@@ -47,7 +47,7 @@ fn main() -> anyhow::Result<()> {
         .with_ansi(std::io::stdout().is_terminal())
         .init();
 
-    let detectors = load_detectors()?;
+    let service = Service::new(load_detectors()?, config.lingua_max_in_flight);
 
     // Lingua runs on blocking threads; more of them than cores only adds memory and
     // context switches for this CPU-bound work. Respects cgroup CPU limits.
@@ -58,11 +58,8 @@ fn main() -> anyhow::Result<()> {
         .build()?
         .block_on(serve(
             config.port,
-            detectors,
-            Limits {
-                body_bytes: config.max_body_bytes,
-                lingua_in_flight: config.lingua_max_in_flight,
-            },
+            service,
+            config.max_body_bytes,
             Duration::from_secs(config.shutdown_delay_secs),
         ))
 }
@@ -109,7 +106,7 @@ async fn bind(port: u16) -> anyhow::Result<(TcpListener, SocketAddr)> {
     }
 }
 
-async fn serve(port: u16, detectors: Detectors, limits: Limits, shutdown_delay: Duration) -> anyhow::Result<()> {
+async fn serve(port: u16, service: Service, body_limit: NonZeroUsize, shutdown_delay: Duration) -> anyhow::Result<()> {
     let (listener, addr) = bind(port).await?;
 
     let listener = listener.tap_io(|tcp| {
@@ -121,9 +118,8 @@ async fn serve(port: u16, detectors: Detectors, limits: Limits, shutdown_delay: 
 
     tracing::event!(name: "server.listen.success", Level::INFO, server.address = %addr, "server is listening");
 
-    let readiness = Readiness::default();
-    axum::serve(listener, langer::router(detectors, limits, readiness.clone()))
-        .with_graceful_shutdown(shut_down(readiness, shutdown_delay))
+    axum::serve(listener, langer::router(service.clone(), body_limit))
+        .with_graceful_shutdown(shut_down(service, shutdown_delay))
         .await?;
 
     tracing::event!(name: "server.shutdown.success", Level::INFO, "server is stopped");
@@ -133,10 +129,10 @@ async fn serve(port: u16, detectors: Detectors, limits: Limits, shutdown_delay: 
 
 /// Resolves when the server should stop accepting connections: a stop signal, then
 /// `delay` of reporting not ready while still serving, so that clients move to other instances.
-async fn shut_down(readiness: Readiness, delay: Duration) {
+async fn shut_down(service: Service, delay: Duration) {
     shutdown_signal().await;
 
-    readiness.shut_down();
+    service.shut_down();
     tracing::event!(
         name: "server.shutdown.start",
         Level::INFO,

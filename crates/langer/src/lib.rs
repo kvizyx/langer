@@ -12,14 +12,25 @@
 //! `GET /detect/languages` lists the supported languages, `GET /schema` serves the API
 //! reference (Scalar) and `GET /schema/openapi.json` the `OpenAPI` document.
 //!
-//! [`router`] builds the service from [`Detectors`]; the binary adds configuration,
-//! logging and graceful shutdown.
+//! The crate has three layers:
+//!
+//! - [`Detectors`]: the two detectors, synchronous;
+//! - [`Service`]: everything a request needs regardless of the transport: input checks, the
+//!   limit of `lingua` detections in flight, running Lingua off the async threads, readiness, and
+//!   [`ServiceError`]s that say what went wrong without choosing a status code;
+//! - [`router`]: the HTTP API over a [`Service`]: request decoding, body limits, status codes and
+//!   headers, the `OpenAPI` document.
+//!
+//! The binary adds configuration, logging and graceful shutdown.
 
 mod detect;
 mod http;
 mod languages;
+mod service;
 
 #[doc(inline)]
 pub use detect::{DetectError, Detection, Detectors, Method};
 #[doc(inline)]
-pub use http::{Limits, Readiness, router};
+pub use http::{DEFAULT_BODY_LIMIT, router};
+#[doc(inline)]
+pub use service::{Service, ServiceError, default_lingua_in_flight};

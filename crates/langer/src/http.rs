@@ -2,10 +2,6 @@
 
 use std::any::Any;
 use std::num::NonZeroUsize;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::thread;
-use std::time::Instant;
 
 use axum::Json;
 use axum::Router;
@@ -17,7 +13,6 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use serde::{Deserialize, Serialize};
 use serde_json::error::Category;
-use tokio::sync::Semaphore;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::CorsLayer;
 use utoipa::{OpenApi, ToSchema};
@@ -25,8 +20,9 @@ use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
 use utoipa_scalar::Scalar;
 
-use crate::detect::{Detection, Detectors, Method};
+use crate::detect::{Detection, Method};
 use crate::languages::{self, Language};
+use crate::service::{Service, ServiceError};
 
 /// Where the API reference is served; `/` and `/docs` redirect here.
 const DOCS_PATH: &str = "/schema";
@@ -47,83 +43,21 @@ const SCALAR_TEMPLATE: &str = include_str!("../assets/scalar.html");
 )]
 struct ApiDoc;
 
-/// Limits that protect the service from oversized or excessive requests.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Limits {
-    /// Largest accepted request body, in bytes; larger ones get `413`.
-    ///
-    /// Detection time grows with the text: about 0.1 s for 64 KiB with `lingua`.
-    pub body_bytes: NonZeroUsize,
-    /// Most `lingua` detections running or waiting for a thread at once; more get `503`.
-    ///
-    /// Lingua runs on blocking threads, so this bounds how long a request can wait for one.
-    pub lingua_in_flight: NonZeroUsize,
-}
-
-/// Default body limit: far more than any chat message.
-const DEFAULT_BODY_BYTES: NonZeroUsize = match NonZeroUsize::new(64 << 10) {
+/// Default limit of request bodies: far more than any chat message. Detection time grows with
+/// the text, about 0.1 s for 64 KiB with `lingua`.
+pub const DEFAULT_BODY_LIMIT: NonZeroUsize = match NonZeroUsize::new(64 << 10) {
     Some(bytes) => bytes,
     None => NonZeroUsize::MIN,
 };
 
-/// `lingua` detections allowed in flight per CPU core: one running, three waiting.
-const LINGUA_SLOTS_PER_CORE: NonZeroUsize = match NonZeroUsize::new(4) {
-    Some(slots) => slots,
-    None => NonZeroUsize::MIN,
-};
-
-impl Default for Limits {
-    /// 64 KiB bodies and [`LINGUA_SLOTS_PER_CORE`] `lingua` detections per CPU core.
-    fn default() -> Self {
-        let cores = thread::available_parallelism().unwrap_or(NonZeroUsize::MIN);
-        Self {
-            body_bytes: DEFAULT_BODY_BYTES,
-            lingua_in_flight: cores.saturating_mul(LINGUA_SLOTS_PER_CORE),
-        }
-    }
-}
-
-/// Whether the service takes new work, shared between the router and whoever stops it.
-///
-/// Cloning gives a handle to the same state.
-#[derive(Clone, Debug, Default)]
-pub struct Readiness {
-    shutting_down: Arc<AtomicBool>,
-}
-
-impl Readiness {
-    /// Marks the service as shutting down: `GET /health/ready` answers `503` from now on, while
-    /// requests are still served until the server stops.
-    pub fn shut_down(&self) {
-        self.shutting_down.store(true, Ordering::Relaxed);
-    }
-
-    fn is_shutting_down(&self) -> bool {
-        self.shutting_down.load(Ordering::Relaxed)
-    }
-}
-
-/// State shared by the request handlers.
-#[derive(Clone, Debug)]
-struct AppState {
-    detectors: Detectors,
-    /// One permit per `lingua` detection allowed in flight.
-    lingua_slots: Arc<Semaphore>,
-    readiness: Readiness,
-}
-
-/// Builds the application router.
-pub fn router(detectors: Detectors, limits: Limits, readiness: Readiness) -> Router {
+/// Builds the HTTP API over `service`. Bodies larger than `body_limit` bytes get `413`.
+pub fn router(service: Service, body_limit: NonZeroUsize) -> Router {
     let (api, openapi) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(detect))
         .routes(routes!(languages))
         .routes(routes!(health))
         .routes(routes!(ready))
-        .with_state(AppState {
-            detectors,
-            lingua_slots: Arc::new(Semaphore::new(limits.lingua_in_flight.get())),
-            readiness,
-        })
+        .with_state(service)
         .split_for_parts();
 
     // axum clones route handlers for every connection, so the documents are rendered once into
@@ -158,13 +92,13 @@ pub fn router(detectors: Detectors, limits: Limits, readiness: Readiness) -> Rou
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed);
 
-    with_middleware(app, limits)
+    with_middleware(app, body_limit)
 }
 
 /// Adds the layers every response goes through. The last one added runs first, so CORS wraps
 /// everything: its headers are set on every response, including the `500` of a panic.
-fn with_middleware(app: Router, limits: Limits) -> Router {
-    app.layer(DefaultBodyLimit::max(limits.body_bytes.get()))
+fn with_middleware(app: Router, body_limit: NonZeroUsize) -> Router {
+    app.layer(DefaultBodyLimit::max(body_limit.get()))
         .layer(CatchPanicLayer::custom(panic_response))
         .layer(CorsLayer::permissive())
 }
@@ -255,23 +189,35 @@ fn panic_response(panic: Box<dyn Any + Send + 'static>) -> Response {
     error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error", Vec::new())
 }
 
-/// `503` for a `lingua` request beyond [`Limits::lingua_in_flight`].
-fn overloaded() -> Response {
-    tracing::event!(
-        name: "detect.lingua.overloaded",
-        tracing::Level::WARN,
-        "too many lingua detections at once",
-    );
+/// The response to a [`ServiceError`]: `422` for invalid input, `503` while unavailable (not to
+/// be cached, with `Retry-After` when known), `500` otherwise.
+fn service_error(e: &ServiceError) -> Response {
+    let status = if e.is_invalid_input() {
+        StatusCode::UNPROCESSABLE_ENTITY
+    } else if e.is_unavailable() {
+        StatusCode::SERVICE_UNAVAILABLE
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    let extra = e
+        .client_details()
+        .map(|message| ErrorExtra {
+            message: message.to_owned(),
+        })
+        .into_iter()
+        .collect();
 
-    let mut response = error(
-        StatusCode::SERVICE_UNAVAILABLE,
-        "Too many lingua detections at once, retry later",
-        Vec::new(),
-    );
-    // A temporary condition: the client should retry soon, and nothing should cache this answer.
+    let mut response = error(status, e.summary(), extra);
+
     let headers = response.headers_mut();
-    headers.insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    if status == StatusCode::SERVICE_UNAVAILABLE {
+        headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    }
+    if let Some(retry_after) = e.retry_after()
+        && let Ok(seconds) = HeaderValue::from_str(&retry_after.as_secs().to_string())
+    {
+        headers.insert(header::RETRY_AFTER, seconds);
+    }
 
     response
 }
@@ -302,7 +248,7 @@ fn error(status: StatusCode, detail: impl Into<String>, extra: Vec<ErrorExtra>) 
         (status = 503, description = "Too many `lingua` detections at once; retry later", body = ErrorBody),
     )
 )]
-async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejection>) -> Response {
+async fn detect(State(service): State<Service>, body: Result<Bytes, BytesRejection>) -> Response {
     let body = match body {
         Ok(body) => body,
         Err(rejection) => {
@@ -328,64 +274,10 @@ async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejectio
         }
     };
 
-    if request.text.trim().is_empty() {
-        return error(StatusCode::UNPROCESSABLE_ENTITY, "Text cannot be empty", Vec::new());
+    match service.detect(request.text, request.method).await {
+        Ok(detection) => (StatusCode::OK, Json(detection)).into_response(),
+        Err(e) => service_error(&e),
     }
-
-    let started = Instant::now();
-    let text_len = request.text.chars().count();
-    let method = request.method;
-
-    let detection = match method {
-        Method::MediaPipe => state.detectors.detect(&request.text, method).map_err(|e| e.to_string()),
-        Method::Lingua => {
-            let Ok(slot) = Arc::clone(&state.lingua_slots).try_acquire_owned() else {
-                return overloaded();
-            };
-
-            let detectors = state.detectors;
-            tokio::task::spawn_blocking(move || {
-                // Released when the detection ends, even if the client is gone by then.
-                let _slot = slot;
-                detectors.detect(&request.text, method)
-            })
-            .await
-            .map_err(|e| e.to_string())
-            .and_then(|result| result.map_err(|e| e.to_string()))
-        }
-    };
-
-    let detection = match detection {
-        Ok(detection) => detection,
-        Err(message) => {
-            tracing::event!(
-                name: "detect.request.failure",
-                tracing::Level::ERROR,
-                detect.method = %method,
-                error.message = message,
-                "language detection failed",
-            );
-
-            return error(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "Language detection failed",
-                Vec::new(),
-            );
-        }
-    };
-
-    tracing::event!(
-        name: "detect.request.success",
-        tracing::Level::DEBUG,
-        detect.method = %detection.method,
-        detect.language = %detection.language,
-        detect.confidence = detection.confidence,
-        text.length = text_len,
-        duration_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
-        "detected language",
-    );
-
-    (StatusCode::OK, Json(detection)).into_response()
 }
 
 /// List supported languages for detection.
@@ -409,9 +301,6 @@ struct Health {
     #[schema(example = "ok")]
     status: &'static str,
 }
-
-/// Text and expected language of the readiness self-check.
-const SELF_CHECK: (&str, &str) = ("Hello, how are you today?", "en");
 
 /// Liveness: whether the process is up.
 #[utoipa::path(
@@ -438,27 +327,11 @@ async fn health() -> Json<Health> {
         (status = 503, description = "The service is shutting down or failed its self-check", body = ErrorBody),
     )
 )]
-async fn ready(State(state): State<AppState>) -> Response {
-    if state.readiness.is_shutting_down() {
-        return error(StatusCode::SERVICE_UNAVAILABLE, "Shutting down", Vec::new());
+async fn ready(State(service): State<Service>) -> Response {
+    match service.check_ready() {
+        Ok(()) => Json(Health { status: "ok" }).into_response(),
+        Err(e) => service_error(&e),
     }
-
-    let (text, expected) = SELF_CHECK;
-    let problem = match state.detectors.detect(text, Method::MediaPipe) {
-        Ok(detection) if detection.language == expected => return Json(Health { status: "ok" }).into_response(),
-        Ok(detection) => format!("detected {:?} instead of {expected:?}", detection.language),
-        Err(e) => e.to_string(),
-    };
-
-    tracing::event!(
-        name: "health.self_check.failure",
-        tracing::Level::ERROR,
-        error.message = problem,
-        "readiness self-check failed",
-    );
-
-    let extra = vec![ErrorExtra { message: problem }];
-    error(StatusCode::SERVICE_UNAVAILABLE, "Self-check failed", extra)
 }
 
 #[cfg(test)]
@@ -477,7 +350,7 @@ mod tests {
 
     #[tokio::test]
     async fn panicking_handler_returns_500_with_cors_headers() {
-        let app = with_middleware(Router::new().route("/panic", get(boom)), Limits::default());
+        let app = with_middleware(Router::new().route("/panic", get(boom)), DEFAULT_BODY_LIMIT);
 
         let request = Request::get("/panic")
             .header(header::ORIGIN, "https://example.com")

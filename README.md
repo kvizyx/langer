@@ -151,7 +151,8 @@ per-thread arenas can be capped with `MALLOC_ARENA_MAX=2` if fragmentation shows
 
 ```text
 crates/
-  langer/            HTTP service: axum, OpenAPI (utoipa) + Scalar, detectors
+  langer/            service: detectors, a transport-independent `Service` layer, and the HTTP
+                     API over it (axum, OpenAPI with utoipa, Scalar)
   langer_mediapipe/  MediaPipe language detector in pure Rust
     vendor/          pinned, unmodified third-party files (vendir): the model, MediaPipe's
                      character tables and the TFLite schema (Apache 2.0)
