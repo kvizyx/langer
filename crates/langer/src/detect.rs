@@ -5,7 +5,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use langer_mediapipe::{Detector, PredictError};
-use lingua::LanguageDetector;
+use lingua::{Language, LanguageDetector};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -101,20 +101,33 @@ impl Detectors {
         })
     }
 
-    /// Lingua's `detect_language_of`, then the confidence of the detected language.
+    /// Lingua's `detect_language_of` and the confidence of the detected language, from one
+    /// computation of the confidence values instead of two: `compute_language_confidence`
+    /// computes all of them again.
     fn detect_lingua(&self, text: &str) -> Detection {
-        let lingua = &self.inner.lingua;
-        let (language, confidence) = match lingua.detect_language_of(text) {
-            Some(language) => (
-                language.iso_code_639_1().to_string(),
-                Some(lingua.compute_language_confidence(text, language)),
-            ),
+        let values = self.inner.lingua.compute_language_confidence_values(text);
+        let (language, confidence) = match most_likely(&values) {
+            Some((language, confidence)) => (language.iso_code_639_1().to_string(), Some(confidence)),
             None => (UNKNOWN.to_owned(), None),
         };
         Detection {
             language,
             confidence,
             method: Method::Lingua,
+        }
+    }
+}
+
+/// The language `detect_language_of` reports for these confidence values, sorted as Lingua
+/// returns them, with its confidence: none if the values are empty, all zero or tied for the top.
+///
+/// Mirrors Lingua 1.8's rules; `tests/detect.rs` checks it against `detect_language_of`.
+fn most_likely(values: &[(Language, f64)]) -> Option<(Language, f64)> {
+    match *values {
+        [] => None,
+        [(language, confidence)] => (confidence > 0.0).then_some((language, confidence)),
+        [(language, confidence), (_, second), ..] => {
+            ((confidence - second).abs() >= f64::EPSILON).then_some((language, confidence))
         }
     }
 }
