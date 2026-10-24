@@ -52,18 +52,23 @@ expression: spec
         "type": "object"
       },
       "ErrorBody": {
+        "description": "Body of every error response.",
         "properties": {
           "detail": {
+            "description": "What went wrong.",
+            "example": "Text cannot be empty",
             "type": "string"
           },
           "extra": {
-            "description": "Validation problems, if any.",
+            "description": "Details of the problem, if any, e.g. why the body is invalid.",
             "items": {
               "$ref": "#/components/schemas/ErrorExtra"
             },
             "type": "array"
           },
           "status_code": {
+            "description": "HTTP status code of the response.",
+            "example": 400,
             "format": "int32",
             "minimum": 0,
             "type": "integer"
@@ -76,8 +81,11 @@ expression: spec
         "type": "object"
       },
       "ErrorExtra": {
+        "description": "One detail of an error.",
         "properties": {
           "message": {
+            "description": "Description of the problem.",
+            "example": "missing field `text` at line 1 column 2",
             "type": "string"
           }
         },
@@ -90,6 +98,7 @@ expression: spec
         "description": "Health of the service.",
         "properties": {
           "status": {
+            "description": "Always `ok` while the service is up.",
             "example": "ok",
             "type": "string"
           }
@@ -260,7 +269,10 @@ expression: spec
             "description": "Service is up"
           }
         },
-        "summary": "Health check"
+        "summary": "Health check",
+        "tags": [
+          "Health"
+        ]
       }
     }
   },
@@ -268,6 +280,10 @@ expression: spec
     {
       "description": "Language detection and supported languages",
       "name": "Detect"
+    },
+    {
+      "description": "Service status",
+      "name": "Health"
     }
   ]
 }

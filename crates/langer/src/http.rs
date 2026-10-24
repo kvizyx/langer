@@ -38,7 +38,10 @@ const SCALAR_TEMPLATE: &str = include_str!("../assets/scalar.html");
         title = "Langer API",
         description = "Self-host language detection HTTP service, based on Lingua and MediaPipe."
     ),
-    tags((name = "Detect", description = "Language detection and supported languages"))
+    tags(
+        (name = "Detect", description = "Language detection and supported languages"),
+        (name = "Health", description = "Service status"),
+    )
 )]
 struct ApiDoc;
 
@@ -136,17 +139,27 @@ struct DetectRequest {
     method: Method,
 }
 
+/// Body of every error response.
 #[derive(Debug, Serialize, ToSchema)]
+#[schema(description = "Body of every error response.")]
 struct ErrorBody {
+    /// HTTP status code of the response.
+    #[schema(example = 400)]
     status_code: u16,
+    /// What went wrong.
+    #[schema(example = "Text cannot be empty")]
     detail: String,
-    /// Validation problems, if any.
+    /// Details of the problem, if any, e.g. why the body is invalid.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     extra: Vec<ErrorExtra>,
 }
 
+/// One detail of an error.
 #[derive(Debug, Serialize, ToSchema)]
+#[schema(description = "One detail of an error.")]
 struct ErrorExtra {
+    /// Description of the problem.
+    #[schema(example = "missing field `text` at line 1 column 2")]
     message: String,
 }
 
@@ -302,6 +315,7 @@ async fn languages() -> Response {
 #[derive(Debug, Serialize, ToSchema)]
 #[schema(description = "Health of the service.")]
 struct Health {
+    /// Always `ok` while the service is up.
     #[schema(example = "ok")]
     status: &'static str,
 }
@@ -310,6 +324,7 @@ struct Health {
 #[utoipa::path(
     get,
     path = "/health",
+    tag = "Health",
     summary = "Health check",
     responses((status = 200, description = "Service is up", body = Health))
 )]
