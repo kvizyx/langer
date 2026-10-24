@@ -139,6 +139,8 @@ async fn detect_with_malformed_json_returns_400(#[case] name: &str, #[case] body
 #[case::missing_text("missing_text", r#"{"method": "lingua"}"#)]
 #[case::text_not_a_string("text_not_a_string", r#"{"text": 42}"#)]
 #[case::unknown_method("unknown_method", r#"{"text": "hi", "method": "fasttext"}"#)]
+#[case::method_null("method_null", r#"{"text": "hi", "method": null}"#)]
+#[case::method_not_a_string("method_not_a_string", r#"{"text": "hi", "method": 42}"#)]
 #[case::unknown_field("unknown_field", r#"{"text": "hi", "methd": "lingua"}"#)]
 #[tokio::test]
 async fn detect_with_invalid_fields_returns_422(#[case] name: &str, #[case] body: &str) {

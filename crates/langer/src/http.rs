@@ -15,6 +15,7 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use metrics::{counter, histogram};
 use metrics_exporter_prometheus::PrometheusHandle;
+use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 use serde_json::error::Category;
 use tower_http::catch_panic::CatchPanicLayer;
@@ -298,10 +299,13 @@ async fn detect(State(service): State<Service>, body: Result<Bytes, BytesRejecti
         Ok(request) => request,
         Err(e) => {
             // Malformed JSON is a bad request; well-formed JSON with wrong or missing fields is
-            // understood but cannot be processed.
-            let (status, detail) = match e.classify() {
-                Category::Data => (StatusCode::UNPROCESSABLE_ENTITY, "Body validation failed"),
-                Category::Syntax | Category::Eof | Category::Io => (StatusCode::BAD_REQUEST, "Body is not valid JSON"),
+            // understood but cannot be processed. serde_json reports some wrong types as syntax
+            // errors (`"method": null`), so the body is parsed again without a schema to tell.
+            let valid_json = e.classify() == Category::Data || serde_json::from_slice::<IgnoredAny>(&body).is_ok();
+            let (status, detail) = if valid_json {
+                (StatusCode::UNPROCESSABLE_ENTITY, "Body validation failed")
+            } else {
+                (StatusCode::BAD_REQUEST, "Body is not valid JSON")
             };
             let extra = vec![ErrorExtra { message: e.to_string() }];
 

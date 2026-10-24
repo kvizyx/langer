@@ -1,0 +1,13 @@
+---
+source: crates/langer/tests/api.rs
+expression: response
+---
+{
+  "detail": "Body validation failed",
+  "extra": [
+    {
+      "message": "expected value at line 1 column 26"
+    }
+  ],
+  "status_code": 422
+}
