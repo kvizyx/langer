@@ -1,6 +1,6 @@
 [package]
 name = "langer"
-description = "HTTP service for language detection (fastText and Lingua)"
+description = "HTTP service for language detection (MediaPipe and Lingua)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
