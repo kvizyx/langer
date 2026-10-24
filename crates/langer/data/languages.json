@@ -1,6 +1,6 @@
 [
   {
-    "iso_639_1": "af",
+    "code": "af",
     "name": "Afrikaans",
     "methods": [
       "mediapipe",
@@ -8,14 +8,14 @@
     ]
   },
   {
-    "iso_639_1": "am",
+    "code": "am",
     "name": "Amharic",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "ar",
+    "code": "ar",
     "name": "Arabic",
     "methods": [
       "mediapipe",
@@ -23,7 +23,14 @@
     ]
   },
   {
-    "iso_639_1": "az",
+    "code": "ar-Latn",
+    "name": "Arabic (Latin script)",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "code": "az",
     "name": "Azerbaijani",
     "methods": [
       "mediapipe",
@@ -31,7 +38,7 @@
     ]
   },
   {
-    "iso_639_1": "be",
+    "code": "be",
     "name": "Belarusian",
     "methods": [
       "mediapipe",
@@ -39,7 +46,7 @@
     ]
   },
   {
-    "iso_639_1": "bg",
+    "code": "bg",
     "name": "Bulgarian",
     "methods": [
       "mediapipe",
@@ -47,7 +54,14 @@
     ]
   },
   {
-    "iso_639_1": "bn",
+    "code": "bg-Latn",
+    "name": "Bulgarian (Latin script)",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "code": "bn",
     "name": "Bengali",
     "methods": [
       "mediapipe",
@@ -55,7 +69,7 @@
     ]
   },
   {
-    "iso_639_1": "bs",
+    "code": "bs",
     "name": "Bosnian",
     "methods": [
       "mediapipe",
@@ -63,7 +77,7 @@
     ]
   },
   {
-    "iso_639_1": "ca",
+    "code": "ca",
     "name": "Catalan",
     "methods": [
       "mediapipe",
@@ -71,21 +85,21 @@
     ]
   },
   {
-    "iso_639_1": "ceb",
+    "code": "ceb",
     "name": "Cebuano",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "co",
+    "code": "co",
     "name": "Corsican",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "cs",
+    "code": "cs",
     "name": "Czech",
     "methods": [
       "mediapipe",
@@ -93,7 +107,7 @@
     ]
   },
   {
-    "iso_639_1": "cy",
+    "code": "cy",
     "name": "Welsh",
     "methods": [
       "mediapipe",
@@ -101,7 +115,7 @@
     ]
   },
   {
-    "iso_639_1": "da",
+    "code": "da",
     "name": "Danish",
     "methods": [
       "mediapipe",
@@ -109,7 +123,7 @@
     ]
   },
   {
-    "iso_639_1": "de",
+    "code": "de",
     "name": "German",
     "methods": [
       "mediapipe",
@@ -117,7 +131,7 @@
     ]
   },
   {
-    "iso_639_1": "el",
+    "code": "el",
     "name": "Greek",
     "methods": [
       "mediapipe",
@@ -125,7 +139,14 @@
     ]
   },
   {
-    "iso_639_1": "en",
+    "code": "el-Latn",
+    "name": "Greek (Latin script)",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "code": "en",
     "name": "English",
     "methods": [
       "mediapipe",
@@ -133,7 +154,7 @@
     ]
   },
   {
-    "iso_639_1": "eo",
+    "code": "eo",
     "name": "Esperanto",
     "methods": [
       "mediapipe",
@@ -141,7 +162,7 @@
     ]
   },
   {
-    "iso_639_1": "es",
+    "code": "es",
     "name": "Spanish",
     "methods": [
       "mediapipe",
@@ -149,7 +170,7 @@
     ]
   },
   {
-    "iso_639_1": "et",
+    "code": "et",
     "name": "Estonian",
     "methods": [
       "mediapipe",
@@ -157,7 +178,7 @@
     ]
   },
   {
-    "iso_639_1": "eu",
+    "code": "eu",
     "name": "Basque",
     "methods": [
       "mediapipe",
@@ -165,7 +186,7 @@
     ]
   },
   {
-    "iso_639_1": "fa",
+    "code": "fa",
     "name": "Persian",
     "methods": [
       "mediapipe",
@@ -173,7 +194,7 @@
     ]
   },
   {
-    "iso_639_1": "fi",
+    "code": "fi",
     "name": "Finnish",
     "methods": [
       "mediapipe",
@@ -181,7 +202,7 @@
     ]
   },
   {
-    "iso_639_1": "fr",
+    "code": "fr",
     "name": "French",
     "methods": [
       "mediapipe",
@@ -189,14 +210,14 @@
     ]
   },
   {
-    "iso_639_1": "fy",
+    "code": "fy",
     "name": "Frisian",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "ga",
+    "code": "ga",
     "name": "Irish",
     "methods": [
       "mediapipe",
@@ -204,21 +225,21 @@
     ]
   },
   {
-    "iso_639_1": "gd",
+    "code": "gd",
     "name": "Scottish Gaelic",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "gl",
+    "code": "gl",
     "name": "Galician",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "gu",
+    "code": "gu",
     "name": "Gujarati",
     "methods": [
       "mediapipe",
@@ -226,21 +247,21 @@
     ]
   },
   {
-    "iso_639_1": "ha",
+    "code": "ha",
     "name": "Hausa",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "haw",
+    "code": "haw",
     "name": "Hawaiian",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "he",
+    "code": "he",
     "name": "Hebrew",
     "methods": [
       "mediapipe",
@@ -248,7 +269,7 @@
     ]
   },
   {
-    "iso_639_1": "hi",
+    "code": "hi",
     "name": "Hindi",
     "methods": [
       "mediapipe",
@@ -256,14 +277,21 @@
     ]
   },
   {
-    "iso_639_1": "hmn",
+    "code": "hi-Latn",
+    "name": "Hindi (Latin script)",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "code": "hmn",
     "name": "Hmong",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "hr",
+    "code": "hr",
     "name": "Croatian",
     "methods": [
       "mediapipe",
@@ -271,14 +299,14 @@
     ]
   },
   {
-    "iso_639_1": "ht",
+    "code": "ht",
     "name": "Haitian Creole",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "hu",
+    "code": "hu",
     "name": "Hungarian",
     "methods": [
       "mediapipe",
@@ -286,7 +314,7 @@
     ]
   },
   {
-    "iso_639_1": "hy",
+    "code": "hy",
     "name": "Armenian",
     "methods": [
       "mediapipe",
@@ -294,7 +322,7 @@
     ]
   },
   {
-    "iso_639_1": "id",
+    "code": "id",
     "name": "Indonesian",
     "methods": [
       "mediapipe",
@@ -302,14 +330,14 @@
     ]
   },
   {
-    "iso_639_1": "ig",
+    "code": "ig",
     "name": "Igbo",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "is",
+    "code": "is",
     "name": "Icelandic",
     "methods": [
       "mediapipe",
@@ -317,7 +345,7 @@
     ]
   },
   {
-    "iso_639_1": "it",
+    "code": "it",
     "name": "Italian",
     "methods": [
       "mediapipe",
@@ -325,7 +353,7 @@
     ]
   },
   {
-    "iso_639_1": "ja",
+    "code": "ja",
     "name": "Japanese",
     "methods": [
       "mediapipe",
@@ -333,14 +361,21 @@
     ]
   },
   {
-    "iso_639_1": "jv",
+    "code": "ja-Latn",
+    "name": "Japanese (Latin script)",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "code": "jv",
     "name": "Javanese",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "ka",
+    "code": "ka",
     "name": "Georgian",
     "methods": [
       "mediapipe",
@@ -348,7 +383,7 @@
     ]
   },
   {
-    "iso_639_1": "kk",
+    "code": "kk",
     "name": "Kazakh",
     "methods": [
       "mediapipe",
@@ -356,21 +391,21 @@
     ]
   },
   {
-    "iso_639_1": "km",
+    "code": "km",
     "name": "Khmer",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "kn",
+    "code": "kn",
     "name": "Kannada",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "ko",
+    "code": "ko",
     "name": "Korean",
     "methods": [
       "mediapipe",
@@ -378,21 +413,21 @@
     ]
   },
   {
-    "iso_639_1": "ku",
+    "code": "ku",
     "name": "Kurdish",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "ky",
+    "code": "ky",
     "name": "Kyrgyz",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "la",
+    "code": "la",
     "name": "Latin",
     "methods": [
       "mediapipe",
@@ -400,28 +435,28 @@
     ]
   },
   {
-    "iso_639_1": "lb",
+    "code": "lb",
     "name": "Luxembourgish",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "lg",
+    "code": "lg",
     "name": "Luganda",
     "methods": [
       "lingua"
     ]
   },
   {
-    "iso_639_1": "lo",
+    "code": "lo",
     "name": "Lao",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "lt",
+    "code": "lt",
     "name": "Lithuanian",
     "methods": [
       "mediapipe",
@@ -429,7 +464,7 @@
     ]
   },
   {
-    "iso_639_1": "lv",
+    "code": "lv",
     "name": "Latvian",
     "methods": [
       "mediapipe",
@@ -437,14 +472,14 @@
     ]
   },
   {
-    "iso_639_1": "mg",
+    "code": "mg",
     "name": "Malagasy",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "mi",
+    "code": "mi",
     "name": "Maori",
     "methods": [
       "mediapipe",
@@ -452,7 +487,7 @@
     ]
   },
   {
-    "iso_639_1": "mk",
+    "code": "mk",
     "name": "Macedonian",
     "methods": [
       "mediapipe",
@@ -460,14 +495,14 @@
     ]
   },
   {
-    "iso_639_1": "ml",
+    "code": "ml",
     "name": "Malayalam",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "mn",
+    "code": "mn",
     "name": "Mongolian",
     "methods": [
       "mediapipe",
@@ -475,7 +510,7 @@
     ]
   },
   {
-    "iso_639_1": "mr",
+    "code": "mr",
     "name": "Marathi",
     "methods": [
       "mediapipe",
@@ -483,7 +518,7 @@
     ]
   },
   {
-    "iso_639_1": "ms",
+    "code": "ms",
     "name": "Malay",
     "methods": [
       "mediapipe",
@@ -491,35 +526,28 @@
     ]
   },
   {
-    "iso_639_1": "mt",
+    "code": "mt",
     "name": "Maltese",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "my",
+    "code": "my",
     "name": "Burmese",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "nb",
-    "name": "Norwegian Bokmal",
-    "methods": [
-      "lingua"
-    ]
-  },
-  {
-    "iso_639_1": "ne",
+    "code": "ne",
     "name": "Nepali",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "nl",
+    "code": "nl",
     "name": "Dutch",
     "methods": [
       "mediapipe",
@@ -527,28 +555,22 @@
     ]
   },
   {
-    "iso_639_1": "nn",
-    "name": "Norwegian Nynorsk",
+    "code": "no",
+    "name": "Norwegian",
     "methods": [
+      "mediapipe",
       "lingua"
     ]
   },
   {
-    "iso_639_1": "no",
-    "name": "Norwegian",
-    "methods": [
-      "mediapipe"
-    ]
-  },
-  {
-    "iso_639_1": "ny",
+    "code": "ny",
     "name": "Nyanja",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "pa",
+    "code": "pa",
     "name": "Punjabi",
     "methods": [
       "mediapipe",
@@ -556,7 +578,7 @@
     ]
   },
   {
-    "iso_639_1": "pl",
+    "code": "pl",
     "name": "Polish",
     "methods": [
       "mediapipe",
@@ -564,14 +586,14 @@
     ]
   },
   {
-    "iso_639_1": "ps",
+    "code": "ps",
     "name": "Pashto",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "pt",
+    "code": "pt",
     "name": "Portuguese",
     "methods": [
       "mediapipe",
@@ -579,7 +601,7 @@
     ]
   },
   {
-    "iso_639_1": "ro",
+    "code": "ro",
     "name": "Romanian",
     "methods": [
       "mediapipe",
@@ -587,7 +609,7 @@
     ]
   },
   {
-    "iso_639_1": "ru",
+    "code": "ru",
     "name": "Russian",
     "methods": [
       "mediapipe",
@@ -595,21 +617,28 @@
     ]
   },
   {
-    "iso_639_1": "sd",
+    "code": "ru-Latn",
+    "name": "Russian (Latin script)",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "code": "sd",
     "name": "Sindhi",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "si",
+    "code": "si",
     "name": "Sinhala",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "sk",
+    "code": "sk",
     "name": "Slovak",
     "methods": [
       "mediapipe",
@@ -617,7 +646,7 @@
     ]
   },
   {
-    "iso_639_1": "sl",
+    "code": "sl",
     "name": "Slovenian",
     "methods": [
       "mediapipe",
@@ -625,14 +654,14 @@
     ]
   },
   {
-    "iso_639_1": "sm",
+    "code": "sm",
     "name": "Samoan",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "sn",
+    "code": "sn",
     "name": "Shona",
     "methods": [
       "mediapipe",
@@ -640,7 +669,7 @@
     ]
   },
   {
-    "iso_639_1": "so",
+    "code": "so",
     "name": "Somali",
     "methods": [
       "mediapipe",
@@ -648,7 +677,7 @@
     ]
   },
   {
-    "iso_639_1": "sq",
+    "code": "sq",
     "name": "Albanian",
     "methods": [
       "mediapipe",
@@ -656,7 +685,7 @@
     ]
   },
   {
-    "iso_639_1": "sr",
+    "code": "sr",
     "name": "Serbian",
     "methods": [
       "mediapipe",
@@ -664,7 +693,7 @@
     ]
   },
   {
-    "iso_639_1": "st",
+    "code": "st",
     "name": "Southern Sotho",
     "methods": [
       "mediapipe",
@@ -672,14 +701,14 @@
     ]
   },
   {
-    "iso_639_1": "su",
+    "code": "su",
     "name": "Sundanese",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "sv",
+    "code": "sv",
     "name": "Swedish",
     "methods": [
       "mediapipe",
@@ -687,7 +716,7 @@
     ]
   },
   {
-    "iso_639_1": "sw",
+    "code": "sw",
     "name": "Swahili",
     "methods": [
       "mediapipe",
@@ -695,7 +724,7 @@
     ]
   },
   {
-    "iso_639_1": "ta",
+    "code": "ta",
     "name": "Tamil",
     "methods": [
       "mediapipe",
@@ -703,7 +732,7 @@
     ]
   },
   {
-    "iso_639_1": "te",
+    "code": "te",
     "name": "Telugu",
     "methods": [
       "mediapipe",
@@ -711,14 +740,14 @@
     ]
   },
   {
-    "iso_639_1": "tg",
+    "code": "tg",
     "name": "Tajik",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "th",
+    "code": "th",
     "name": "Thai",
     "methods": [
       "mediapipe",
@@ -726,7 +755,7 @@
     ]
   },
   {
-    "iso_639_1": "tl",
+    "code": "tl",
     "name": "Tagalog",
     "methods": [
       "mediapipe",
@@ -734,14 +763,14 @@
     ]
   },
   {
-    "iso_639_1": "tn",
+    "code": "tn",
     "name": "Tswana",
     "methods": [
       "lingua"
     ]
   },
   {
-    "iso_639_1": "tr",
+    "code": "tr",
     "name": "Turkish",
     "methods": [
       "mediapipe",
@@ -749,14 +778,14 @@
     ]
   },
   {
-    "iso_639_1": "ts",
+    "code": "ts",
     "name": "Tsonga",
     "methods": [
       "lingua"
     ]
   },
   {
-    "iso_639_1": "uk",
+    "code": "uk",
     "name": "Ukrainian",
     "methods": [
       "mediapipe",
@@ -764,7 +793,7 @@
     ]
   },
   {
-    "iso_639_1": "ur",
+    "code": "ur",
     "name": "Urdu",
     "methods": [
       "mediapipe",
@@ -772,14 +801,14 @@
     ]
   },
   {
-    "iso_639_1": "uz",
+    "code": "uz",
     "name": "Uzbek",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "vi",
+    "code": "vi",
     "name": "Vietnamese",
     "methods": [
       "mediapipe",
@@ -787,7 +816,7 @@
     ]
   },
   {
-    "iso_639_1": "xh",
+    "code": "xh",
     "name": "Xhosa",
     "methods": [
       "mediapipe",
@@ -795,14 +824,14 @@
     ]
   },
   {
-    "iso_639_1": "yi",
+    "code": "yi",
     "name": "Yiddish",
     "methods": [
       "mediapipe"
     ]
   },
   {
-    "iso_639_1": "yo",
+    "code": "yo",
     "name": "Yoruba",
     "methods": [
       "mediapipe",
@@ -810,7 +839,7 @@
     ]
   },
   {
-    "iso_639_1": "zh",
+    "code": "zh",
     "name": "Chinese",
     "methods": [
       "mediapipe",
@@ -818,7 +847,14 @@
     ]
   },
   {
-    "iso_639_1": "zu",
+    "code": "zh-Latn",
+    "name": "Chinese (Latin script)",
+    "methods": [
+      "mediapipe"
+    ]
+  },
+  {
+    "code": "zu",
     "name": "Zulu",
     "methods": [
       "mediapipe",

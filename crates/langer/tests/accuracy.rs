@@ -89,7 +89,8 @@ fn shared_languages(mediapipe: &Detector) -> BTreeSet<String> {
         .collect()
 }
 
-/// ISO 639-1 code of a reported language: MediaPipe uses `iw`, `fil` and `xx-Latn` codes.
+/// ISO 639-1 code of a reported tag or MediaPipe label: romanized text (`ru-Latn`) counts as its
+/// language, `iw` and `fil` are MediaPipe's codes for `he` and `tl`.
 fn iso_639_1(code: &str) -> &str {
     match code.split('-').next().unwrap_or(code) {
         "iw" => "he",

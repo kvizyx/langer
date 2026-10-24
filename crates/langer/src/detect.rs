@@ -9,8 +9,8 @@ use lingua::{Language, LanguageDetector};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-/// Language code reported when no language could be detected.
-const UNKNOWN: &str = "unknown";
+/// BCP 47 tag reported when no language could be detected.
+const UNDETERMINED: &str = "und";
 
 /// Detection method requested by a client.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Deserialize, Serialize, ToSchema)]
@@ -46,8 +46,9 @@ impl fmt::Display for Method {
 #[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
 #[schema(description = "Result of a detection.")]
 pub struct Detection {
-    /// Language code. MediaPipe reports its own codes (e.g. `iw`, `fil`, `zh-Latn`) and
-    /// `unknown`; Lingua reports ISO 639-1 codes, or `unknown` when it cannot decide.
+    /// BCP 47 tag, the same for both methods and listed by `GET /detect/languages`: an
+    /// ISO 639-1 code where one exists (`en`), else ISO 639-3 (`ceb`), with a script subtag for
+    /// romanized text (`ru-Latn`, `mediapipe` only); `und` when no language is detected.
     #[schema(example = "en")]
     pub language: String,
     /// Confidence in `0.0..=1.0`; `null` when Lingua cannot decide.
@@ -105,7 +106,7 @@ impl Detectors {
         })?;
 
         Ok(Detection {
-            language: top.language.to_owned(),
+            language: tag(top.language).to_owned(),
             confidence: Some(widen(top.probability)),
             method: Method::MediaPipe,
         })
@@ -117,8 +118,8 @@ impl Detectors {
     fn detect_lingua(&self, text: &str) -> Detection {
         let values = self.inner.lingua.compute_language_confidence_values(text);
         let (language, confidence) = match most_likely(&values) {
-            Some((language, confidence)) => (language.iso_code_639_1().to_string(), Some(confidence)),
-            None => (UNKNOWN.to_owned(), None),
+            Some((language, confidence)) => (tag(&language.iso_code_639_1().to_string()).to_owned(), Some(confidence)),
+            None => (UNDETERMINED.to_owned(), None),
         };
 
         Detection {
@@ -126,6 +127,19 @@ impl Detectors {
             confidence,
             method: Method::Lingua,
         }
+    }
+}
+
+/// The BCP 47 tag of a code reported by either detector, so that both name a language the same
+/// way: MediaPipe's deprecated `iw` and its `fil` and `unknown`, and Lingua's Norwegian written
+/// standards `nb` and `nn`, which MediaPipe does not tell apart.
+pub(crate) fn tag(code: &str) -> &str {
+    match code {
+        "iw" => "he",
+        "fil" => "tl",
+        "nb" | "nn" => "no",
+        "unknown" => UNDETERMINED,
+        code => code,
     }
 }
 
@@ -185,7 +199,7 @@ impl fmt::Debug for Detectors {
 mod tests {
     use rstest::rstest;
 
-    use super::{Method, widen};
+    use super::{Method, tag, widen};
 
     #[rstest]
     #[case::probability(0.999_821_96, 0.999_821_96)]
@@ -194,6 +208,18 @@ mod tests {
     #[case::tiny(1e-30, 1e-30)]
     fn widen_keeps_the_decimal_form(#[case] value: f32, #[case] expected: f64) {
         assert_eq!(widen(value).to_string(), expected.to_string());
+    }
+
+    #[rstest]
+    #[case::deprecated("iw", "he")]
+    #[case::filipino("fil", "tl")]
+    #[case::bokmal("nb", "no")]
+    #[case::nynorsk("nn", "no")]
+    #[case::unknown("unknown", "und")]
+    #[case::romanized("ru-Latn", "ru-Latn")]
+    #[case::plain("en", "en")]
+    fn tag_unifies_codes(#[case] code: &str, #[case] expected: &str) {
+        assert_eq!(tag(code), expected);
     }
 
     #[rstest]

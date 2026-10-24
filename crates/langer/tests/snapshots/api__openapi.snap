@@ -37,7 +37,7 @@ expression: spec
             ]
           },
           "language": {
-            "description": "Language code. MediaPipe reports its own codes (e.g. `iw`, `fil`, `zh-Latn`) and\n`unknown`; Lingua reports ISO 639-1 codes, or `unknown` when it cannot decide.",
+            "description": "BCP 47 tag, the same for both methods and listed by `GET /detect/languages`: an\nISO 639-1 code where one exists (`en`), else ISO 639-3 (`ceb`), with a script subtag for\nromanized text (`ru-Latn`, `mediapipe` only); `und` when no language is detected.",
             "example": "en",
             "type": "string"
           },
@@ -112,8 +112,8 @@ expression: spec
       "Language": {
         "description": "A language and the methods that can detect it.",
         "properties": {
-          "iso_639_1": {
-            "description": "ISO 639-1 code.",
+          "code": {
+            "description": "BCP 47 tag, as `POST /detect` reports it.",
             "example": "en",
             "type": "string"
           },
@@ -131,7 +131,7 @@ expression: spec
           }
         },
         "required": [
-          "iso_639_1",
+          "code",
           "name",
           "methods"
         ],

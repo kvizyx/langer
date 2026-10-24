@@ -34,9 +34,11 @@ curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
 {"language": "ru", "confidence": 0.9997, "method": "mediapipe"}
 ```
 
-- `language`: MediaPipe reports its own codes, as the Python service did: mostly ISO 639-1, plus
-  `iw` (Hebrew), `fil` (Filipino), romanized variants such as `zh-Latn`, and `unknown`. Lingua
-  reports ISO 639-1 codes, or `unknown` when it cannot decide.
+- `language` is a [BCP 47](https://www.rfc-editor.org/info/bcp47) tag, the same for both
+  methods and listed by `GET /detect/languages`: the ISO 639-1 code where one exists (`ru`), else
+  the ISO 639-3 one (`ceb`). `mediapipe` also reports romanized text with a script subtag
+  (`ru-Latn`). Norwegian is `no` and Filipino is `tl` for both methods. `und` means that no
+  language was detected.
 - `confidence` is a number in `0..=1`; for `lingua` it is `null` when Lingua cannot decide.
 - Body that is not valid JSON: `400` with `"detail": "Body is not valid JSON"`.
 - Valid JSON with a missing `text`, a field of the wrong type, an unknown `method` or unknown
@@ -51,10 +53,10 @@ Every error, including unknown paths (`404`) and methods (`405`), has the same
 
 ### `GET /detect/languages`
 
-All supported languages with ISO 639-1 codes, sorted by code, identical to the Python service:
+All languages `POST /detect` can report, with their tags, sorted by tag:
 
 ```json
-[{"iso_639_1": "af", "name": "Afrikaans", "methods": ["mediapipe", "lingua"]}, ...]
+[{"code": "af", "name": "Afrikaans", "methods": ["mediapipe", "lingua"]}, ...]
 ```
 
 The list lives in [`crates/langer/data/languages.json`](crates/langer/data/languages.json);

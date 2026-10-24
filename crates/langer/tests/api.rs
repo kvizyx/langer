@@ -102,18 +102,15 @@ async fn detect_with_lingua_method_uses_lingua() {
 }
 
 #[tokio::test]
-async fn detect_with_lingua_returns_unknown_without_letters() {
+async fn detect_with_lingua_returns_und_without_letters() {
     let (_, body) = post_detect(r#"{"text": "😀 !!! 42", "method": "lingua"}"#).await;
-    assert_eq!(
-        body,
-        json!({"language": "unknown", "confidence": null, "method": "lingua"})
-    );
+    assert_eq!(body, json!({"language": "und", "confidence": null, "method": "lingua"}));
 }
 
 #[tokio::test]
-async fn detect_with_mediapipe_returns_mediapipe_codes() {
+async fn detect_with_mediapipe_returns_current_codes() {
     let (_, body) = post_detect(r#"{"text": "שלום, מה שלומך היום?"}"#).await;
-    assert_eq!(body["language"], "iw");
+    assert_eq!(body["language"], "he");
 }
 
 #[rstest]

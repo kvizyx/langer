@@ -27,7 +27,7 @@ fn lingua_reference(lingua: &lingua::LanguageDetector, text: &str) -> (String, O
             language.iso_code_639_1().to_string(),
             Some(lingua.compute_language_confidence(text, language)),
         ),
-        None => ("unknown".to_owned(), None),
+        None => ("und".to_owned(), None),
     }
 }
 
@@ -66,13 +66,13 @@ proptest! {
         prop_assert!(!mediapipe.language.is_empty());
         prop_assert!(mediapipe.confidence.is_some_and(|c| (0.0..=1.0).contains(&c)));
 
-        // Lingua decides or reports `unknown` without a confidence, as its reference API does.
+        // Lingua decides or reports `und` without a confidence, as its reference API does.
         let reference = lingua_reference(&LanguageDetectorBuilder::from_languages(&[English, French, Russian]).build(), &text);
         let lingua = detectors.detect(&text, Method::Lingua).expect("detection succeeds");
         prop_assert_eq!(&lingua.language, &reference.0);
         prop_assert!(same_confidence(lingua.confidence, reference.1));
         prop_assert_eq!(lingua.method, Method::Lingua);
-        prop_assert_eq!(lingua.language == "unknown", lingua.confidence.is_none());
+        prop_assert_eq!(lingua.language == "und", lingua.confidence.is_none());
         prop_assert!(lingua.confidence.is_none_or(|c| (0.0..=1.0).contains(&c)));
     }
 }

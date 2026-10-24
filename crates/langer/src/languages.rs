@@ -12,9 +12,9 @@ pub(crate) const JSON: &str = include_str!(concat!(env!("OUT_DIR"), "/languages.
 #[derive(Debug, Deserialize, Serialize, ToSchema)]
 #[schema(description = "A language and the methods that can detect it.")]
 pub(crate) struct Language {
-    /// ISO 639-1 code.
+    /// BCP 47 tag, as `POST /detect` reports it.
     #[schema(example = "en")]
-    pub(crate) iso_639_1: String,
+    pub(crate) code: String,
     /// English name.
     #[schema(example = "English")]
     pub(crate) name: String,
@@ -27,6 +27,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use super::*;
+    use crate::detect::tag;
 
     fn languages() -> Vec<Language> {
         serde_json::from_str(JSON).unwrap()
@@ -36,39 +37,44 @@ mod tests {
         languages()
             .into_iter()
             .filter(|l| l.methods.contains(&method))
-            .map(|l| l.iso_639_1)
+            .map(|l| l.code)
             .collect()
     }
 
-    /// ISO 639-1 code of a MediaPipe label, as listed in `data/languages.json`.
-    fn iso_639_1(label: &str) -> Option<&str> {
-        match label.split('-').next()? {
-            "unknown" => None,
-            "iw" => Some("he"),
-            "fil" => Some("tl"),
-            code => Some(code),
-        }
+    /// Tags of a detector's `codes`, other than `und`.
+    fn tags<'a>(codes: impl IntoIterator<Item = &'a str>) -> BTreeSet<String> {
+        codes
+            .into_iter()
+            .map(tag)
+            .filter(|&tag| tag != "und")
+            .map(str::to_owned)
+            .collect()
     }
 
     #[test]
     fn languages_are_sorted_by_code() {
         let languages = languages();
-        assert!(languages.windows(2).all(|w| w[0].iso_639_1 < w[1].iso_639_1));
+        assert!(languages.windows(2).all(|w| w[0].code < w[1].code));
     }
 
     #[test]
     fn mediapipe_languages_match_model_labels() {
         let detector = langer_mediapipe::Detector::new().expect("the bundled model loads");
-        let model: BTreeSet<String> = detector.labels().filter_map(iso_639_1).map(str::to_owned).collect();
-        assert_eq!(codes(Method::MediaPipe), model, "update data/languages.json");
+        assert_eq!(
+            codes(Method::MediaPipe),
+            tags(detector.labels()),
+            "update data/languages.json"
+        );
     }
 
     #[test]
     fn lingua_languages_match_lingua_crate() {
-        let expected: BTreeSet<String> = lingua::Language::all()
+        let codes_639_1: Vec<String> = lingua::Language::all()
             .iter()
             .map(|l| l.iso_code_639_1().to_string())
             .collect();
+
+        let expected = tags(codes_639_1.iter().map(String::as_str));
         assert_eq!(codes(Method::Lingua), expected, "update data/languages.json");
     }
 }
