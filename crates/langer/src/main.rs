@@ -8,7 +8,7 @@ use std::time::Instant;
 use anyhow::Context;
 use axum::serve::ListenerExt;
 use clap::Parser;
-use langer::Detectors;
+use langer::{Detectors, Limits};
 use langer_mediapipe::Detector;
 use lingua::LanguageDetectorBuilder;
 use tracing::Level;
@@ -21,6 +21,9 @@ struct Config {
     /// Port to listen on.
     #[arg(long, env = "PORT", default_value_t = 3000)]
     port: u16,
+    /// Largest accepted request body, in bytes.
+    #[arg(long, env = "MAX_BODY_BYTES", default_value_t = Limits::default().body_bytes)]
+    max_body_bytes: usize,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -39,7 +42,13 @@ fn main() -> anyhow::Result<()> {
         .enable_all()
         .max_blocking_threads(cores)
         .build()?
-        .block_on(serve(config.port, detectors))
+        .block_on(serve(
+            config.port,
+            detectors,
+            Limits {
+                body_bytes: config.max_body_bytes,
+            },
+        ))
 }
 
 fn load_detectors() -> anyhow::Result<Detectors> {
@@ -57,7 +66,7 @@ fn load_detectors() -> anyhow::Result<Detectors> {
     Ok(Detectors::new(mediapipe, lingua))
 }
 
-async fn serve(port: u16, detectors: Detectors) -> anyhow::Result<()> {
+async fn serve(port: u16, detectors: Detectors, limits: Limits) -> anyhow::Result<()> {
     let addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, port));
     let listener = tokio::net::TcpListener::bind(addr)
         .await
@@ -69,7 +78,7 @@ async fn serve(port: u16, detectors: Detectors) -> anyhow::Result<()> {
             }
         });
     tracing::event!(name: "server.listen.success", Level::INFO, server.address = %addr, "listening");
-    axum::serve(listener, langer::router(detectors))
+    axum::serve(listener, langer::router(detectors, limits))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
     tracing::event!(name: "server.shutdown.success", Level::INFO, "stopped");

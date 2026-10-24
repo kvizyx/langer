@@ -22,4 +22,4 @@ mod languages;
 #[doc(inline)]
 pub use detect::{DetectError, Detection, Detectors, Method};
 #[doc(inline)]
-pub use http::router;
+pub use http::{Limits, router};

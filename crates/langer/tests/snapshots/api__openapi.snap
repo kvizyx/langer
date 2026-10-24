@@ -183,6 +183,16 @@ expression: spec
             },
             "description": "Invalid body or empty text"
           },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Body larger than the limit"
+          },
           "500": {
             "content": {
               "application/json": {

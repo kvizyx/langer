@@ -6,7 +6,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
-use langer::Detectors;
+use langer::{Detectors, Limits};
 use langer_mediapipe::Detector;
 use lingua::Language::{English, French, Russian};
 use lingua::LanguageDetectorBuilder;
@@ -14,12 +14,15 @@ use rstest::rstest;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
+/// Body limit of the test app: small, so that tests stay fast.
+const BODY_LIMIT: usize = 1024;
+
 fn app() -> Router {
     let lingua = LanguageDetectorBuilder::from_languages(&[English, French, Russian]).build();
-    langer::router(Detectors::new(
-        Detector::new().expect("the bundled model loads"),
-        lingua,
-    ))
+    langer::router(
+        Detectors::new(Detector::new().expect("the bundled model loads"), lingua),
+        Limits { body_bytes: BODY_LIMIT },
+    )
 }
 
 async fn send(request: Request<Body>) -> (StatusCode, Vec<u8>) {
@@ -175,4 +178,19 @@ async fn wrong_method_returns_405_with_allowed_methods() {
         .to_bytes();
     let body: Value = serde_json::from_slice(&body).expect("response is JSON");
     assert_eq!(body, json!({"status_code": 405, "detail": "Method not allowed"}));
+}
+
+#[tokio::test]
+async fn detect_with_body_over_the_limit_returns_413() {
+    let (status, body) = post_detect(&json!({ "text": "a".repeat(BODY_LIMIT) }).to_string()).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(body["status_code"], 413);
+    assert_eq!(body["detail"], "Cannot read the request body");
+}
+
+#[tokio::test]
+async fn detect_with_body_at_the_limit_succeeds() {
+    // `{"text":"…"}` takes 11 bytes besides the text.
+    let (status, _) = post_detect(&json!({ "text": "a".repeat(BODY_LIMIT - 11) }).to_string()).await;
+    assert_eq!(status, StatusCode::OK);
 }

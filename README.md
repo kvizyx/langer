@@ -40,7 +40,9 @@ curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
 - `confidence` is a number in `0..=1`; for `lingua` it is `null` when Lingua cannot decide.
 - Empty or whitespace-only text: `400 {"status_code":400,"detail":"Text cannot be empty"}`.
 - Invalid JSON, missing `text` or unknown `method`: `400` with
-  `"detail": "Validation failed for POST /detect"` and the reason in `extra`.
+  `"detail": "Body validation failed"` and the reason in `extra`.
+- Body larger than `MAX_BODY_BYTES`: `413`. Every error, including unknown paths (`404`) and
+  methods (`405`), has the same `{"status_code", "detail", "extra"?}` shape.
 
 ### `GET /detect/languages`
 
@@ -66,6 +68,7 @@ MediaPipe model's labels and the `lingua` crate.
 |---|---|---|
 | `PORT` | `3000` | HTTP port |
 | `LOG_LEVEL` | `info` | `tracing` log filter (`warn`, `langer=debug`, ...) |
+| `MAX_BODY_BYTES` | `65536` | largest accepted request body; detection time grows with the text, about 0.1 s for 64 KiB with `lingua` |
 
 Both models are embedded in the executable; there is nothing else to configure.
 

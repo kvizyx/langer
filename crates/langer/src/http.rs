@@ -6,8 +6,8 @@ use std::time::Instant;
 use axum::Json;
 use axum::Router;
 use axum::body::Bytes;
-use axum::extract::State;
 use axum::extract::rejection::BytesRejection;
+use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -38,9 +38,23 @@ const SCALAR_TEMPLATE: &str = include_str!("../assets/scalar.html");
 )]
 struct ApiDoc;
 
+/// Limits that protect the service from oversized or excessive requests.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Limits {
+    /// Largest accepted request body, in bytes; larger ones get `413`.
+    ///
+    /// Detection time grows with the text: about 0.1 s for 64 KiB with `lingua`.
+    pub body_bytes: usize,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self { body_bytes: 64 << 10 }
+    }
+}
+
 /// Builds the application router.
-///
-pub fn router(detectors: Detectors) -> Router {
+pub fn router(detectors: Detectors, limits: Limits) -> Router {
     let (api, openapi) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(detect))
         .routes(routes!(languages))
@@ -63,6 +77,7 @@ pub fn router(detectors: Detectors) -> Router {
     .route("/docs", get(redirect_to_docs))
     .fallback(not_found)
     .method_not_allowed_fallback(method_not_allowed)
+    .layer(DefaultBodyLimit::max(limits.body_bytes))
     .layer(CorsLayer::permissive())
     .layer(CatchPanicLayer::custom(panic_response))
 }
@@ -146,6 +161,7 @@ fn error(status: StatusCode, detail: impl Into<String>, extra: Vec<ErrorExtra>) 
     responses(
         (status = 200, description = "Detected language", body = Detection),
         (status = 400, description = "Invalid body or empty text", body = ErrorBody),
+        (status = 413, description = "Body larger than the limit", body = ErrorBody),
         (status = 500, description = "Detection failed", body = ErrorBody),
     )
 )]
