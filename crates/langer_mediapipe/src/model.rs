@@ -232,12 +232,16 @@ impl<'a> Graph<'a> {
         let mut dense = Vec::new();
         let mut current = single(concat.outputs(), "Concatenation outputs")?;
         let mut width: usize = embeddings.iter().map(|(_, e)| e.width()).sum();
-        let softmax_op = loop {
+        let mut softmax_op = None;
+
+        // Every step reads another operator, so a graph whose layers loop ends after all of them.
+        for _ in 0..self.ops.len() {
             let next = self
                 .ops
                 .iter()
                 .find(|(_, op)| op.inputs().is_some_and(|i| i.iter().next() == Some(current)))
                 .ok_or_else(|| LoadError::new("the graph ends before Softmax"))?;
+
             match next.0 {
                 Kind::Builtin(fb::BuiltinOperator::FULLY_CONNECTED) => {
                     let layer = self.dense(next.1, width)?;
@@ -245,10 +249,14 @@ impl<'a> Graph<'a> {
                     dense.push(layer);
                     current = single(next.1.outputs(), "FullyConnected outputs")?;
                 }
-                Kind::Builtin(fb::BuiltinOperator::SOFTMAX) => break next.1,
+                Kind::Builtin(fb::BuiltinOperator::SOFTMAX) => {
+                    softmax_op = Some(next.1);
+                    break;
+                }
                 kind => return Err(LoadError::new(format!("unsupported operator {kind:?}"))),
             }
-        };
+        }
+        let softmax_op = softmax_op.ok_or_else(|| LoadError::new("the fully connected layers loop"))?;
         let beta = softmax_op
             .builtin_options_as_softmax_options()
             .ok_or_else(|| LoadError::new("Softmax has no options"))?
