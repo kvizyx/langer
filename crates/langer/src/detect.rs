@@ -96,7 +96,7 @@ impl Detectors {
         })?;
         Ok(Detection {
             language: top.language.to_owned(),
-            confidence: Some(f64::from(top.probability)),
+            confidence: Some(widen(top.probability)),
             method: Method::MediaPipe,
         })
     }
@@ -116,6 +116,13 @@ impl Detectors {
             method: Method::Lingua,
         }
     }
+}
+
+/// `value` as the `f64` closest to its shortest decimal form, e.g. 0.99982196 rather than
+/// 0.9998219609260559: `f64::from` keeps the binary error of the `f32`, which then shows up
+/// in the JSON response as noise digits.
+fn widen(value: f32) -> f64 {
+    value.to_string().parse().unwrap_or_else(|_| f64::from(value))
 }
 
 /// The language `detect_language_of` reports for these confidence values, sorted as Lingua
@@ -167,7 +174,16 @@ impl fmt::Debug for Detectors {
 mod tests {
     use rstest::rstest;
 
-    use super::Method;
+    use super::{Method, widen};
+
+    #[rstest]
+    #[case::probability(0.999_821_96, 0.999_821_96)]
+    #[case::tenth(0.1, 0.1)]
+    #[case::one(1.0, 1.0)]
+    #[case::tiny(1e-30, 1e-30)]
+    fn widen_keeps_the_decimal_form(#[case] value: f32, #[case] expected: f64) {
+        assert_eq!(widen(value).to_string(), expected.to_string());
+    }
 
     #[rstest]
     fn method_display_matches_api_name(#[values(Method::MediaPipe, Method::Lingua)] method: Method) {
