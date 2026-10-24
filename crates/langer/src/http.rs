@@ -135,8 +135,10 @@ async fn method_not_allowed() -> Response {
     error(StatusCode::METHOD_NOT_ALLOWED, "Method not allowed", Vec::new())
 }
 
-/// Body of `POST /detect`.
+/// Body of `POST /detect`. Unknown fields are rejected, so that a misspelt `method` is not
+/// silently ignored.
 #[derive(Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
 #[schema(description = "Body of `POST /detect`.")]
 struct DetectRequest {
     /// Text to detect the language of.

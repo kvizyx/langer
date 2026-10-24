@@ -6,6 +6,7 @@ expression: spec
   "components": {
     "schemas": {
       "DetectRequest": {
+        "additionalProperties": false,
         "description": "Body of `POST /detect`.",
         "properties": {
           "method": {

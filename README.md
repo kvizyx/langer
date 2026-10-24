@@ -39,7 +39,7 @@ curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
   reports ISO 639-1 codes, or `unknown` when it cannot decide.
 - `confidence` is a number in `0..=1`; for `lingua` it is `null` when Lingua cannot decide.
 - Empty or whitespace-only text: `400 {"status_code":400,"detail":"Text cannot be empty"}`.
-- Invalid JSON, missing `text` or unknown `method`: `400` with
+- Invalid JSON, missing `text`, unknown `method` or unknown fields: `400` with
   `"detail": "Body validation failed"` and the reason in `extra`.
 - Body larger than `MAX_BODY_BYTES`: `413`. More `lingua` requests than `LINGUA_MAX_IN_FLIGHT`
   at once: `503` with `Retry-After`. Every error, including unknown paths (`404`) and

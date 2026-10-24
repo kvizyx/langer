@@ -108,6 +108,7 @@ async fn detect_with_blank_text_returns_400(#[case] text: &str) {
 #[case::missing_text("missing_text", r#"{"method": "lingua"}"#)]
 #[case::text_not_a_string("text_not_a_string", r#"{"text": 42}"#)]
 #[case::unknown_method("unknown_method", r#"{"text": "hi", "method": "fasttext"}"#)]
+#[case::unknown_field("unknown_field", r#"{"text": "hi", "methd": "lingua"}"#)]
 #[tokio::test]
 async fn detect_with_invalid_body_returns_400(#[case] name: &str, #[case] body: &str) {
     let (status, response) = post_detect(body).await;
