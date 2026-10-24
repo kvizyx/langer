@@ -8,6 +8,10 @@ updates:
     groups:
       crates:
         patterns: ["*"]
+  - package-ecosystem: rust-toolchain
+    directory: /
+    schedule:
+      interval: weekly
   - package-ecosystem: docker
     directory: /
     schedule:

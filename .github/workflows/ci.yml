@@ -24,11 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # Same toolchain as the Docker image, so new lints don't break the build unannounced.
-      - uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.98"
-          components: rustfmt, clippy
+      # The toolchain of rust-toolchain.toml, as everywhere else.
+      - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings

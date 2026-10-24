@@ -157,6 +157,16 @@ update and check them.
 
 ## Development
 
+The Rust version is pinned in [`rust-toolchain.toml`](rust-toolchain.toml) for local builds, CI and
+the Docker image; rustup installs it on first use.
+
+Git hooks run the CI checks locally with [lefthook](https://lefthook.dev): formatting and clippy
+on commit, tests on push. Enable them once:
+
+```bash
+lefthook install
+```
+
 ```bash
 cargo test --workspace
 ```
