@@ -261,6 +261,9 @@ impl<'a> Graph<'a> {
             .builtin_options_as_softmax_options()
             .ok_or_else(|| LoadError::new("Softmax has no options"))?
             .beta();
+        if !(beta.is_finite() && beta > 0.0) {
+            return Err(LoadError::new(format!("invalid Softmax beta {beta}")));
+        }
         if single(softmax_op.outputs(), "Softmax outputs")? != single(self.subgraph.outputs(), "subgraph outputs")? {
             return Err(LoadError::new("Softmax is not the model output"));
         }
