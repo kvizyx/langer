@@ -23,6 +23,9 @@ struct Config {
     /// Port to listen on.
     #[arg(long, env = "PORT", default_value_t = 3000)]
     port: u16,
+    /// Log filter: a level (`warn`) or `tracing` directives (`info,langer=debug`).
+    #[arg(long, env = "LOG_LEVEL", default_value = "info")]
+    log_level: String,
     /// Largest accepted request body, in bytes.
     #[arg(long, env = "MAX_BODY_BYTES", default_value_t = Limits::default().body_bytes)]
     max_body_bytes: usize,
@@ -33,8 +36,10 @@ struct Config {
 
 fn main() -> anyhow::Result<()> {
     let config = Config::parse();
+    let filter =
+        EnvFilter::try_new(&config.log_level).with_context(|| format!("invalid LOG_LEVEL {:?}", config.log_level))?;
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_env("LOG_LEVEL").unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(filter)
         .with_ansi(std::io::stdout().is_terminal())
         .init();
 

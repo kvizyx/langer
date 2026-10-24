@@ -68,7 +68,7 @@ MediaPipe model's labels and the `lingua` crate.
 | env | default | description |
 |---|---|---|
 | `PORT` | `3000` | HTTP port |
-| `LOG_LEVEL` | `info` | `tracing` log filter (`warn`, `langer=debug`, ...) |
+| `LOG_LEVEL` | `info` | `tracing` log filter (`warn`, `info,langer=debug`, ...); an invalid one stops the start |
 | `MAX_BODY_BYTES` | `65536` | largest accepted request body; detection time grows with the text, about 0.1 s for 64 KiB with `lingua` |
 | `LINGUA_MAX_IN_FLIGHT` | 4 per CPU core | most `lingua` detections running or queued at once; more get `503` with `Retry-After: 1` |
 
