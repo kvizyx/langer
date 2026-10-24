@@ -26,12 +26,11 @@ RUN cargo build --release --locked -p langer
 FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
 
 LABEL org.opencontainers.image.title="Langer"
-LABEL org.opencontainers.image.description="Self-host language detection HTTP service, based on Lingua and MediaPipe."
+LABEL org.opencontainers.image.description="Self-hosted language detection HTTP service, based on Lingua and MediaPipe."
 LABEL org.opencontainers.image.licenses="MIT"
 
 # Both models are embedded in the executable.
 COPY --from=builder /src/target/release/langer /usr/local/bin/langer
 
-ENV PORT=3000
 EXPOSE 3000
 ENTRYPOINT ["/usr/local/bin/langer"]

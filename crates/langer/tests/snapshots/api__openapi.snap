@@ -148,7 +148,7 @@ expression: spec
     }
   },
   "info": {
-    "description": "Self-host language detection HTTP service, based on Lingua and MediaPipe.",
+    "description": "Self-hosted language detection HTTP service, based on Lingua and MediaPipe.",
     "license": {
       "identifier": "MIT",
       "name": "MIT"

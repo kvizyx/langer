@@ -1,4 +1,9 @@
+# Not needed to build the image: build output, VCS and editor files, docs and tooling configs.
 target
 debug
 .git
+.github
 .idea
+**/*.md
+lefthook.yml
+deny.toml

@@ -34,7 +34,7 @@ const SCALAR_TEMPLATE: &str = include_str!("../assets/scalar.html");
 #[openapi(
     info(
         title = "Langer API",
-        description = "Self-host language detection HTTP service, based on Lingua and MediaPipe."
+        description = "Self-hosted language detection HTTP service, based on Lingua and MediaPipe."
     ),
     tags(
         (name = "Detect", description = "Language detection and supported languages"),
