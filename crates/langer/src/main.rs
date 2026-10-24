@@ -1,7 +1,7 @@
 //! Entry point: configuration, logging, model loading and graceful shutdown.
 
 use std::io::IsTerminal;
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::NonZeroUsize;
 use std::thread;
 use std::time::Instant;
@@ -12,6 +12,7 @@ use clap::Parser;
 use langer::{Detectors, Limits};
 use langer_mediapipe::Detector;
 use lingua::LanguageDetectorBuilder;
+use tokio::net::TcpListener;
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
 
@@ -71,17 +72,36 @@ fn load_detectors() -> anyhow::Result<Detectors> {
     Ok(Detectors::new(mediapipe, lingua))
 }
 
+/// Listens on every IPv6 and IPv4 address: an IPv6 socket accepts IPv4 too on Linux by default
+/// (`net.ipv6.bindv6only = 0`). Falls back to IPv4 only where the kernel has no IPv6.
+async fn bind(port: u16) -> anyhow::Result<(TcpListener, SocketAddr)> {
+    let dual_stack = SocketAddr::from((Ipv6Addr::UNSPECIFIED, port));
+    match TcpListener::bind(dual_stack).await {
+        Ok(listener) => Ok((listener, dual_stack)),
+        Err(e) => {
+            tracing::event!(
+                name: "server.ipv6.failure",
+                Level::WARN,
+                error.message = %e,
+                "cannot listen on IPv6, listening on IPv4 only",
+            );
+            let ipv4 = SocketAddr::from((Ipv4Addr::UNSPECIFIED, port));
+            let listener = TcpListener::bind(ipv4)
+                .await
+                .with_context(|| format!("cannot listen on {ipv4}"))?;
+            Ok((listener, ipv4))
+        }
+    }
+}
+
 async fn serve(port: u16, detectors: Detectors, limits: Limits) -> anyhow::Result<()> {
-    let addr = SocketAddr::from((Ipv4Addr::UNSPECIFIED, port));
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .with_context(|| format!("cannot listen on {addr}"))?
-        .tap_io(|tcp| {
-            // Responses are small and written at once; don't let Nagle delay them.
-            if let Err(e) = tcp.set_nodelay(true) {
-                tracing::event!(name: "server.nodelay.failure", Level::WARN, error.message = %e, "cannot set TCP_NODELAY");
-            }
-        });
+    let (listener, addr) = bind(port).await?;
+    let listener = listener.tap_io(|tcp| {
+        // Responses are small and written at once; don't let Nagle delay them.
+        if let Err(e) = tcp.set_nodelay(true) {
+            tracing::event!(name: "server.nodelay.failure", Level::WARN, error.message = %e, "cannot set TCP_NODELAY");
+        }
+    });
     tracing::event!(name: "server.listen.success", Level::INFO, server.address = %addr, "server is listening");
     axum::serve(listener, langer::router(detectors, limits))
         .with_graceful_shutdown(shutdown_signal())
