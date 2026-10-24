@@ -97,22 +97,30 @@ pub fn router(detectors: Detectors, limits: Limits) -> Router {
 
     let spec = openapi.clone();
 
-    api.merge(
-        Scalar::with_url(DOCS_PATH, openapi)
-            .title("Langer API")
-            .custom_html(SCALAR_TEMPLATE),
-    )
-    .route(
-        "/schema/openapi.json",
-        get(move || std::future::ready(Json(spec.clone()))),
-    )
-    .route("/", get(redirect_to_docs))
-    .route("/docs", get(redirect_to_docs))
-    .fallback(not_found)
-    .method_not_allowed_fallback(method_not_allowed)
-    .layer(DefaultBodyLimit::max(limits.body_bytes))
-    .layer(CorsLayer::permissive())
-    .layer(CatchPanicLayer::custom(panic_response))
+    let app = api
+        .merge(
+            Scalar::with_url(DOCS_PATH, openapi)
+                .title("Langer API")
+                .custom_html(SCALAR_TEMPLATE),
+        )
+        .route(
+            "/schema/openapi.json",
+            get(move || std::future::ready(Json(spec.clone()))),
+        )
+        .route("/", get(redirect_to_docs))
+        .route("/docs", get(redirect_to_docs))
+        .fallback(not_found)
+        .method_not_allowed_fallback(method_not_allowed);
+
+    with_middleware(app, limits)
+}
+
+/// Adds the layers every response goes through. The last one added runs first, so CORS wraps
+/// everything: its headers are set on every response, including the `500` of a panic.
+fn with_middleware(app: Router, limits: Limits) -> Router {
+    app.layer(DefaultBodyLimit::max(limits.body_bytes))
+        .layer(CatchPanicLayer::custom(panic_response))
+        .layer(CorsLayer::permissive())
 }
 
 async fn redirect_to_docs() -> Response {
@@ -347,15 +355,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn panicking_handler_returns_500() {
-        let app = Router::new()
-            .route("/panic", get(boom))
-            .layer(CatchPanicLayer::custom(panic_response));
-        let response = app
-            .oneshot(Request::get("/panic").body(Body::empty()).unwrap())
-            .await
+    async fn panicking_handler_returns_500_with_cors_headers() {
+        let app = with_middleware(Router::new().route("/panic", get(boom)), Limits::default());
+
+        let request = Request::get("/panic")
+            .header(header::ORIGIN, "https://example.com")
+            .body(Body::empty())
             .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+
         assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        assert_eq!(response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body, json!({"status_code": 500, "detail": "Internal server error"}));
