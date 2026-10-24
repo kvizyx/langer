@@ -61,6 +61,13 @@ impl KmeansEmbedding {
     }
 }
 
+/// Most inputs of a [`HybridDense`] layer whose `i32` accumulator cannot overflow.
+///
+/// Every product of an `i8` weight and an `i8` input is at most 2^14 in magnitude, and so is
+/// every term of the zero point correction: both sums stay below 2^14 * 65 535 and their
+/// difference within `i32`. MediaPipe's layers have a few hundred inputs.
+pub(crate) const MAX_DENSE_INPUTS: usize = 65_535;
+
 /// Fully connected layer with `i8` weights applied to `f32` input ("hybrid" layer).
 ///
 /// MediaPipe runs these layers through TFLite's XNNPACK delegate, which quantizes the input
@@ -210,6 +217,20 @@ mod tests {
         // Exact: 0.5 + 0.1 * (10 - 40 - 15) and -100 + 0.1 * (5 + 10 - 2.5).
         assert!((out[0] + 4.0).abs() < 0.05, "{out:?}");
         assert!((out[1] + 98.75).abs() < 0.05, "{out:?}");
+    }
+
+    #[test]
+    fn hybrid_dense_does_not_overflow_at_the_largest_supported_width() {
+        // The worst case: every product and the zero point correction at their extremes,
+        // with opposite signs. Debug builds panic on overflow.
+        let weights: Box<[i8]> = vec![-128; MAX_DENSE_INPUTS].into();
+        let linear = HybridDense::new(weights, MAX_DENSE_INPUTS, 1.0, Box::new([0.0]), false);
+        let mut input = vec![-1.0; MAX_DENSE_INPUTS];
+        input[0] = 1e-6;
+        let out = linear.apply(&input);
+        assert!(out[0].is_finite(), "{out:?}");
+        let out = linear.apply(&vec![1.0; MAX_DENSE_INPUTS]);
+        assert!(out[0].is_finite(), "{out:?}");
     }
 
     #[test]

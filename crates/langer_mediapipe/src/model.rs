@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::io::{Cursor, Read};
 
-use crate::layers::{HybridDense, KmeansEmbedding, softmax};
+use crate::layers::{HybridDense, KmeansEmbedding, MAX_DENSE_INPUTS, softmax};
 use crate::ngram::NgramHash;
 use crate::schema_generated::tflite as fb;
 use crate::{LoadError, PredictError};
@@ -390,8 +390,13 @@ impl<'a> Graph<'a> {
         let [outputs, width] = shape[..] else {
             return Err(LoadError::new("FullyConnected weights must be a matrix"));
         };
-        if width != inputs || data.len() != outputs * inputs {
+        if width != inputs || outputs.checked_mul(inputs) != Some(data.len()) {
             return Err(LoadError::new("FullyConnected weights do not match the input"));
+        }
+        if inputs > MAX_DENSE_INPUTS {
+            return Err(LoadError::new(format!(
+                "FullyConnected has {inputs} inputs, more than the supported {MAX_DENSE_INPUTS}"
+            )));
         }
         let quantization = self
             .tensors
