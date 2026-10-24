@@ -2,7 +2,7 @@
 
 use std::any::Any;
 use std::num::NonZeroUsize;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use axum::Json;
 use axum::Router;
@@ -53,9 +53,31 @@ struct ApiDoc;
 /// the text, about 0.1 s for 64 KiB with `lingua`.
 pub const DEFAULT_BODY_LIMIT: NonZeroUsize = NonZeroUsize::new(64 << 10).expect("64 KiB is not zero");
 
-/// Builds the HTTP API over `service`. Bodies larger than `body_limit` bytes get `413`;
-/// `GET /metrics` renders `metrics` (see [`install_metrics`](crate::install_metrics)).
-pub fn router(service: Service, body_limit: NonZeroUsize, metrics: PrometheusHandle) -> Router {
+/// Default time limit of a request, from its headers to the response: far more than a
+/// detection takes, so that only clients that stall sending the body hit it.
+pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Limits every request is held to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Limits {
+    /// Largest accepted body; larger ones get `413`.
+    pub body: NonZeroUsize,
+    /// Longest time to read the body and answer; slower requests get `408`.
+    pub request_timeout: Duration,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            body: DEFAULT_BODY_LIMIT,
+            request_timeout: DEFAULT_REQUEST_TIMEOUT,
+        }
+    }
+}
+
+/// Builds the HTTP API over `service`, holding requests to `limits`; `GET /metrics` renders
+/// `metrics` (see [`install_metrics`](crate::install_metrics)).
+pub fn router(service: Service, limits: Limits, metrics: PrometheusHandle) -> Router {
     let (api, openapi) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(detect))
         .routes(routes!(languages))
@@ -100,15 +122,32 @@ pub fn router(service: Service, body_limit: NonZeroUsize, metrics: PrometheusHan
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed);
 
-    with_middleware(app, body_limit)
+    with_middleware(app, limits)
 }
 
 /// Adds the layers every response goes through. The last one added runs first, so CORS wraps
-/// everything: its headers are set on every response, including the `500` of a panic.
-fn with_middleware(app: Router, body_limit: NonZeroUsize) -> Router {
-    app.layer(DefaultBodyLimit::max(body_limit.get()))
+/// everything: its headers are set on every response, including the `500` of a panic and the
+/// `408` of a timeout.
+fn with_middleware(app: Router, limits: Limits) -> Router {
+    app.layer(DefaultBodyLimit::max(limits.body.get()))
+        .layer(middleware::from_fn_with_state(limits.request_timeout, time_out))
         .layer(CatchPanicLayer::custom(panic_response))
         .layer(CorsLayer::permissive())
+}
+
+/// Answers `408` and closes the connection when a request takes longer than `timeout`, e.g.
+/// because its client stalls sending the body.
+async fn time_out(State(timeout): State<Duration>, request: Request, next: Next) -> Response {
+    let Ok(response) = tokio::time::timeout(timeout, next.run(request)).await else {
+        let mut response = error(StatusCode::REQUEST_TIMEOUT, "Request timed out", Vec::new());
+        response
+            .headers_mut()
+            .insert(header::CONNECTION, HeaderValue::from_static("close"));
+
+        return response;
+    };
+
+    response
 }
 
 /// The `OpenAPI` document, or `500` if it could not be serialized at startup.
@@ -279,6 +318,7 @@ fn error(status: StatusCode, detail: impl Into<String>, extra: Vec<ErrorExtra>) 
         (status = 200, description = "Detected language", body = Detection),
         (status = 400, description = "Body is not valid JSON", body = ErrorBody),
         (status = 422, description = "Valid JSON with invalid fields, or empty text", body = ErrorBody),
+        (status = 408, description = "Body not received in time", body = ErrorBody),
         (status = 413, description = "Body larger than the limit", body = ErrorBody),
         (status = 500, description = "Detection failed", body = ErrorBody),
         (status = 503, description = "Too many `lingua` detections at once; retry later", body = ErrorBody),
@@ -387,9 +427,14 @@ mod tests {
         panic!("boom")
     }
 
+    async fn stall() -> &'static str {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        "too late"
+    }
+
     #[tokio::test]
     async fn panicking_handler_returns_500_with_cors_headers() {
-        let app = with_middleware(Router::new().route("/panic", get(boom)), DEFAULT_BODY_LIMIT);
+        let app = with_middleware(Router::new().route("/panic", get(boom)), Limits::default());
 
         let request = Request::get("/panic")
             .header(header::ORIGIN, "https://example.com")
@@ -402,5 +447,27 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let body: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(body, json!({"status_code": 500, "detail": "Internal server error"}));
+    }
+
+    #[tokio::test]
+    async fn slow_request_returns_408_and_closes_the_connection() {
+        let limits = Limits {
+            request_timeout: Duration::from_millis(10),
+            ..Limits::default()
+        };
+        let app = with_middleware(Router::new().route("/stall", get(stall)), limits);
+
+        let request = Request::get("/stall")
+            .header(header::ORIGIN, "https://example.com")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::REQUEST_TIMEOUT);
+        assert_eq!(response.headers()[header::CONNECTION], "close");
+        assert_eq!(response.headers()[header::ACCESS_CONTROL_ALLOW_ORIGIN], "*");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let body: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body, json!({"status_code": 408, "detail": "Request timed out"}));
     }
 }

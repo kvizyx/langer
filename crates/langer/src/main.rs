@@ -3,17 +3,19 @@
 use std::io::IsTerminal;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::NonZeroUsize;
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use axum::serve::ListenerExt;
 use clap::Parser;
-use langer::{Detectors, Service};
+use langer::{Detectors, Limits, Service};
 use langer_mediapipe::Detector;
 use lingua::LanguageDetectorBuilder;
 use metrics_exporter_prometheus::PrometheusHandle;
 use tokio::net::TcpListener;
+use tokio::sync::Notify;
 use tracing::Level;
 use tracing_subscriber::EnvFilter;
 
@@ -33,6 +35,9 @@ struct Config {
     /// Largest accepted request body, in bytes.
     #[arg(long, env = "MAX_BODY_BYTES", default_value_t = langer::DEFAULT_BODY_LIMIT)]
     max_body_bytes: NonZeroUsize,
+    /// Seconds a request may take, from its headers to the response; slower ones get 408.
+    #[arg(long, env = "REQUEST_TIMEOUT_SECS", default_value_t = langer::DEFAULT_REQUEST_TIMEOUT.as_secs())]
+    request_timeout_secs: u64,
     /// Most `lingua` detections running or queued at once; more get 503. Defaults to four per core.
     #[arg(long, env = "LINGUA_MAX_IN_FLIGHT", default_value_t = langer::default_lingua_in_flight())]
     lingua_max_in_flight: NonZeroUsize,
@@ -54,6 +59,10 @@ fn main() -> anyhow::Result<()> {
     // Before the service, which records its first metrics when it is created.
     let metrics = langer::install_metrics().context("cannot install the metrics recorder")?;
     let service = Service::new(load_detectors()?, config.lingua_max_in_flight);
+    let limits = Limits {
+        body: config.max_body_bytes,
+        request_timeout: Duration::from_secs(config.request_timeout_secs),
+    };
 
     // Lingua runs on blocking threads; more of them than cores only adds memory and
     // context switches for this CPU-bound work. Respects cgroup CPU limits.
@@ -65,7 +74,7 @@ fn main() -> anyhow::Result<()> {
         .block_on(serve(
             config.port,
             service,
-            config.max_body_bytes,
+            limits,
             metrics,
             Duration::from_secs(config.shutdown_delay_secs),
         ))
@@ -116,7 +125,7 @@ async fn bind(port: u16) -> anyhow::Result<(TcpListener, SocketAddr)> {
 async fn serve(
     port: u16,
     service: Service,
-    body_limit: NonZeroUsize,
+    limits: Limits,
     metrics: PrometheusHandle,
     shutdown_delay: Duration,
 ) -> anyhow::Result<()> {
@@ -141,9 +150,28 @@ async fn serve(
         }
     });
 
-    axum::serve(listener, langer::router(service.clone(), body_limit, metrics))
-        .with_graceful_shutdown(shut_down(service, shutdown_delay))
-        .await?;
+    let closed = Arc::new(Notify::new());
+    let server = axum::serve(listener, langer::router(service.clone(), limits, metrics))
+        .with_graceful_shutdown(shut_down(service, shutdown_delay, Arc::clone(&closed)))
+        .into_future();
+
+    // Requests in flight end within the request timeout, but a connection that never sends a
+    // full request has no timeout and would keep the server from stopping.
+    let drained = async {
+        closed.notified().await;
+        tokio::time::sleep(limits.request_timeout).await;
+    };
+
+    tokio::select! {
+        result = server => result?,
+        () = drained => {
+            tracing::event!(
+                name: "server.shutdown.timeout",
+                Level::WARN,
+                "connections still open after the request timeout, closing them",
+            );
+        }
+    }
 
     tracing::event!(name: "server.shutdown.success", Level::INFO, "server is stopped");
 
@@ -152,7 +180,8 @@ async fn serve(
 
 /// Resolves when the server should stop accepting connections: a stop signal, then
 /// `delay` of reporting not ready while still serving, so that clients move to other instances.
-async fn shut_down(service: Service, delay: Duration) {
+/// Notifies `closed` when it resolves.
+async fn shut_down(service: Service, delay: Duration, closed: Arc<Notify>) {
     shutdown_signal().await;
 
     service.shut_down();
@@ -163,6 +192,8 @@ async fn shut_down(service: Service, delay: Duration) {
         "server is shutting down",
     );
     tokio::time::sleep(delay).await;
+
+    closed.notify_one();
 }
 
 /// Resolves on Ctrl+C or SIGTERM (sent by Kubernetes before killing the pod).

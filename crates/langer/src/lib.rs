@@ -35,7 +35,7 @@ mod telemetry;
 #[doc(inline)]
 pub use detect::{DetectError, Detection, Detectors, Method};
 #[doc(inline)]
-pub use http::{DEFAULT_BODY_LIMIT, router};
+pub use http::{DEFAULT_BODY_LIMIT, DEFAULT_REQUEST_TIMEOUT, Limits, router};
 #[doc(inline)]
 pub use service::{Service, ServiceError, default_lingua_in_flight};
 #[doc(inline)]

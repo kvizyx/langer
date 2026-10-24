@@ -193,6 +193,16 @@ expression: spec
             },
             "description": "Body is not valid JSON"
           },
+          "408": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Body not received in time"
+          },
           "413": {
             "content": {
               "application/json": {

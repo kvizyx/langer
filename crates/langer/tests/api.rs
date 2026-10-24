@@ -9,7 +9,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
-use langer::{Detectors, Service};
+use langer::{Detectors, Limits, Service};
 use langer_mediapipe::Detector;
 use lingua::Language::{English, French, Russian};
 use lingua::LanguageDetectorBuilder;
@@ -21,8 +21,12 @@ use tower::ServiceExt;
 /// Body limit of the test app: small, so that tests stay fast.
 const BODY_LIMIT: usize = 1024;
 
-fn bytes(n: usize) -> NonZeroUsize {
-    NonZeroUsize::new(n).expect("limit is positive")
+/// Default limits with a body limit of `body` bytes.
+fn limits(body: usize) -> Limits {
+    Limits {
+        body: NonZeroUsize::new(body).expect("limit is positive"),
+        ..Limits::default()
+    }
 }
 
 fn service(lingua_in_flight: NonZeroUsize) -> Service {
@@ -44,7 +48,7 @@ fn metrics() -> PrometheusHandle {
 fn app() -> Router {
     langer::router(
         service(langer::default_lingua_in_flight()),
-        bytes(BODY_LIMIT),
+        limits(BODY_LIMIT),
         metrics(),
     )
 }
@@ -183,7 +187,7 @@ async fn ready_returns_ok_while_serving() {
 #[tokio::test]
 async fn ready_returns_503_while_shutting_down_but_detection_still_works() {
     let service = service(langer::default_lingua_in_flight());
-    let app = langer::router(service.clone(), langer::DEFAULT_BODY_LIMIT, metrics());
+    let app = langer::router(service.clone(), Limits::default(), metrics());
 
     service.shut_down();
 
@@ -273,7 +277,7 @@ async fn detect_with_body_at_the_limit_succeeds() {
 
 #[tokio::test]
 async fn detect_with_lingua_over_the_in_flight_limit_returns_503() {
-    let app = langer::router(service(NonZeroUsize::MIN), bytes(1 << 20), metrics());
+    let app = langer::router(service(NonZeroUsize::MIN), limits(1 << 20), metrics());
     let request = || {
         let body = json!({ "text": "Это обычное сообщение на русском языке. ".repeat(500), "method": "lingua" });
         Request::post("/detect")
