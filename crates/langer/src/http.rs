@@ -7,6 +7,7 @@ use axum::Json;
 use axum::Router;
 use axum::body::Bytes;
 use axum::extract::State;
+use axum::extract::rejection::BytesRejection;
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -60,12 +61,22 @@ pub fn router(detectors: Detectors) -> Router {
     )
     .route("/", get(redirect_to_docs))
     .route("/docs", get(redirect_to_docs))
+    .fallback(not_found)
+    .method_not_allowed_fallback(method_not_allowed)
     .layer(CorsLayer::permissive())
     .layer(CatchPanicLayer::custom(panic_response))
 }
 
 async fn redirect_to_docs() -> Response {
     (StatusCode::FOUND, [(header::LOCATION, DOCS_PATH)]).into_response()
+}
+
+async fn not_found() -> Response {
+    error(StatusCode::NOT_FOUND, "Not found", Vec::new())
+}
+
+async fn method_not_allowed() -> Response {
+    error(StatusCode::METHOD_NOT_ALLOWED, "Method not allowed", Vec::new())
 }
 
 /// Body of `POST /detect`.
@@ -138,7 +149,16 @@ fn error(status: StatusCode, detail: impl Into<String>, extra: Vec<ErrorExtra>) 
         (status = 500, description = "Detection failed", body = ErrorBody),
     )
 )]
-async fn detect(State(detectors): State<Detectors>, body: Bytes) -> Response {
+async fn detect(State(detectors): State<Detectors>, body: Result<Bytes, BytesRejection>) -> Response {
+    let body = match body {
+        Ok(body) => body,
+        Err(rejection) => {
+            let extra = vec![ErrorExtra {
+                message: rejection.body_text(),
+            }];
+            return error(rejection.status(), "Cannot read the request body", extra);
+        }
+    };
     let request: DetectRequest = match serde_json::from_slice(&body) {
         Ok(request) => request,
         Err(e) => {

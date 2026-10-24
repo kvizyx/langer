@@ -150,3 +150,29 @@ async fn openapi_document_is_unchanged() {
     let spec: Value = serde_json::from_slice(&spec).expect("spec is JSON");
     insta::assert_json_snapshot!("openapi", spec);
 }
+
+#[tokio::test]
+async fn unknown_path_returns_404() {
+    let (status, body) = get("/nowhere").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let body: Value = serde_json::from_slice(&body).expect("response is JSON");
+    assert_eq!(body, json!({"status_code": 404, "detail": "Not found"}));
+}
+
+#[tokio::test]
+async fn wrong_method_returns_405_with_allowed_methods() {
+    let response = app()
+        .oneshot(Request::get("/detect").body(Body::empty()).expect("request is valid"))
+        .await
+        .expect("router is infallible");
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(response.headers()[header::ALLOW], "POST");
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body is readable")
+        .to_bytes();
+    let body: Value = serde_json::from_slice(&body).expect("response is JSON");
+    assert_eq!(body, json!({"status_code": 405, "detail": "Method not allowed"}));
+}
