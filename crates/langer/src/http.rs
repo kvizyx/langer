@@ -12,7 +12,7 @@ use axum::body::Bytes;
 use axum::extract::rejection::BytesRejection;
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{HeaderValue, StatusCode, header};
-use axum::response::{IntoResponse, Response};
+use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use serde::{Deserialize, Serialize};
 use tokio::sync::Semaphore;
@@ -21,7 +21,7 @@ use tower_http::cors::CorsLayer;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_axum::routes;
-use utoipa_scalar::{Scalar, Servable};
+use utoipa_scalar::Scalar;
 
 use crate::detect::{Detection, Detectors, Method};
 use crate::languages::{self, Language};
@@ -101,17 +101,32 @@ pub fn router(detectors: Detectors, limits: Limits) -> Router {
         })
         .split_for_parts();
 
-    let spec = openapi.clone();
+    // axum clones route handlers for every connection, so the documents are rendered once into
+    // `Bytes`, whose clones share the data: a captured `OpenApi` took ~100 KiB per connection.
+    let spec = match serde_json::to_vec(&openapi) {
+        Ok(json) => Some(Bytes::from(json)),
+        Err(e) => {
+            tracing::event!(
+                name: "openapi.serialize.failure",
+                tracing::Level::ERROR,
+                error.message = %e,
+                "cannot serialize the OpenAPI document",
+            );
+            None
+        }
+    };
+    let page = Bytes::from(
+        Scalar::new(openapi)
+            .title("Langer API")
+            .custom_html(SCALAR_TEMPLATE)
+            .to_html(),
+    );
 
     let app = api
-        .merge(
-            Scalar::with_url(DOCS_PATH, openapi)
-                .title("Langer API")
-                .custom_html(SCALAR_TEMPLATE),
-        )
+        .route(DOCS_PATH, get(move || std::future::ready(Html(page.clone()))))
         .route(
             "/schema/openapi.json",
-            get(move || std::future::ready(Json(spec.clone()))),
+            get(move || std::future::ready(openapi_response(spec.clone()))),
         )
         .route("/", get(redirect_to_docs))
         .route("/docs", get(redirect_to_docs))
@@ -127,6 +142,18 @@ fn with_middleware(app: Router, limits: Limits) -> Router {
     app.layer(DefaultBodyLimit::max(limits.body_bytes.get()))
         .layer(CatchPanicLayer::custom(panic_response))
         .layer(CorsLayer::permissive())
+}
+
+/// The `OpenAPI` document, or `500` if it could not be serialized at startup.
+fn openapi_response(spec: Option<Bytes>) -> Response {
+    match spec {
+        Some(json) => ([(header::CONTENT_TYPE, "application/json")], json).into_response(),
+        None => error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "OpenAPI document unavailable",
+            Vec::new(),
+        ),
+    }
 }
 
 async fn redirect_to_docs() -> Response {
