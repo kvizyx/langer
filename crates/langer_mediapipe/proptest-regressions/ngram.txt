@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 442c9a5507046b5fd2843653b03db4c6a010fc5e57257b345c5050749a3e65f5 # shrinks to text = "Ⱥ"
 cc 9b1cd4a5f41ec7fa474e29e4c205c41ca6ba70356b7f7823bc71abf58e8ca08a # shrinks to text = "K"
+cc b32ee5b15e1e75a703c66177bad388818683dbbdac9ea86e777b24b76af0f464 # shrinks to chars = ['Ⱥ', 'a', 'a', 'a', 'a', 'Ⱥ', 'Ⱥ', 'Ⱥ', 'Ⱥ', 'a', 'Ⱥ', 'a', 'a', 'a', 'Ⱥ', '\0', 'Ⱥ', 'İ', 'a', 'a', 'a', 'Ⱥ', 'İ', 'Ⱥ', '¡', 'a', 'İ', 'Ⱥ', 'a', '¡', '0', '0', ' ', '0', '0', '¡', ' ', '¡'], max_splits = 10

@@ -11,6 +11,9 @@ const SUFFIX: u8 = b'$';
 /// Token that replaces every non-alphabetic character.
 const SEPARATOR: u8 = b' ';
 
+/// Characters of the text kept per token, see [`NgramHash::hash`].
+const CHARS_PER_TOKEN: usize = 2;
+
 /// Parameters of an `NGramHash` op, read from its custom options.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct NgramHash {
@@ -26,7 +29,22 @@ impl NgramHash {
     /// Returns one row of bucket ids per head, each with one id per token.
     ///
     /// Ids are in `1..=vocab_size`; 0 is reserved for padding.
+    ///
+    /// Only the first `max_splits` characters of the text become tokens, so only a prefix of
+    /// [`CHARS_PER_TOKEN`] characters per token is read: hashing a long text then costs as much
+    /// as hashing a short one. The prefix is long enough for any text, as lowercasing changes a
+    /// character's UTF-8 length by at most half (e.g. "Ⱥ", two bytes, becomes three).
     pub(crate) fn hash(&self, text: &str) -> Result<Vec<Vec<u32>>, PredictError> {
+        let prefix = text
+            .char_indices()
+            .nth(CHARS_PER_TOKEN.saturating_mul(self.max_splits))
+            .and_then(|(end, _)| text.get(..end))
+            .unwrap_or(text);
+        self.hash_all(prefix)
+    }
+
+    /// [`Self::hash`] over the whole text.
+    fn hash_all(&self, text: &str) -> Result<Vec<Vec<u32>>, PredictError> {
         let input = if self.lowercase {
             lowercase(text)
         } else {
@@ -200,6 +218,20 @@ mod tests {
                 let expected = if unicode::is_alpha(u32::from(c)) { c.to_string() } else { " ".to_owned() };
                 prop_assert_eq!(token, &expected);
             }
+        }
+
+        #[test]
+        fn hash_of_a_prefix_equals_hash_of_the_whole_text(
+            // Characters whose lowercase form is longer or shorter, among any others.
+            chars in proptest::collection::vec(
+                prop_oneof![any::<char>(), Just('Ⱥ'), Just('\u{212A}'), Just('İ'), Just('a'), Just(' ')],
+                0..200,
+            ),
+            max_splits in 3_usize..40,
+        ) {
+            let text: String = chars.into_iter().collect();
+            let op = NgramHash { max_splits, ..op() };
+            prop_assert_eq!(op.hash(&text).unwrap(), op.hash_all(&text).unwrap());
         }
 
         #[test]
