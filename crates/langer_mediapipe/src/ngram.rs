@@ -234,24 +234,53 @@ mod tests {
             ),
             max_splits in 3_usize..40,
         ) {
-            let text: String = chars.into_iter().collect();
-            let op = NgramHash { max_splits, ..op() };
-            prop_assert_eq!(op.hash(&text).unwrap(), op.hash_all(&text).unwrap());
+            check_prefix_hash(&chars.into_iter().collect::<String>(), max_splits)?;
         }
 
         #[test]
         fn hash_puts_every_ngram_into_its_vocabulary(text in any::<String>()) {
-            let rows = op().hash(&text).unwrap();
-            // Lowercasing changes byte lengths and MediaPipe reads the original byte length of the
-            // lowercased text: a longer character (e.g. "Ⱥ" -> "ⱥ") is cut off, a shorter one
-            // (e.g. Kelvin sign -> "k") leaves NUL separators. Only the byte length bounds tokens.
-            let max_tokens = text.len().min(126) + 2;
-            prop_assert_eq!(rows.len(), 2);
-            prop_assert_eq!(rows[0].len(), rows[1].len());
-            for (row, &(_, vocab)) in rows.iter().zip(op().heads.iter()) {
-                prop_assert!((2..=max_tokens).contains(&row.len()));
-                prop_assert!(row.iter().all(|&id| (1..=vocab).contains(&id)));
-            }
+            check_hash_rows(&text)?;
         }
+    }
+
+    /// The prefix [`NgramHash::hash`] reads gives the same ids as the whole text.
+    fn check_prefix_hash(text: &str, max_splits: usize) -> Result<(), TestCaseError> {
+        let op = NgramHash { max_splits, ..op() };
+        prop_assert_eq!(op.hash(text).unwrap(), op.hash_all(text).unwrap());
+
+        Ok(())
+    }
+
+    /// Every head has one id per token, in its vocabulary.
+    fn check_hash_rows(text: &str) -> Result<(), TestCaseError> {
+        let rows = op().hash(text).unwrap();
+
+        // Lowercasing changes byte lengths and MediaPipe reads the original byte length of the
+        // lowercased text: a longer character (e.g. "Ⱥ" -> "ⱥ") is cut off, a shorter one
+        // (e.g. Kelvin sign -> "k") leaves NUL separators. Only the byte length bounds tokens.
+        let max_tokens = text.len().min(126) + 2;
+        prop_assert_eq!(rows.len(), 2);
+        prop_assert_eq!(rows[0].len(), rows[1].len());
+        for (row, &(_, vocab)) in rows.iter().zip(op().heads.iter()) {
+            prop_assert!((2..=max_tokens).contains(&row.len()));
+            prop_assert!(row.iter().all(|&id| (1..=vocab).contains(&id)));
+        }
+
+        Ok(())
+    }
+
+    // Cases proptest once found: characters whose lowercase form has another UTF-8 length.
+    #[rstest]
+    #[case::lowercase_is_longer("Ⱥ")]
+    #[case::lowercase_is_shorter("\u{212A}")]
+    fn hash_puts_every_ngram_into_its_vocabulary_when_lowercase_changes_length(#[case] text: &str) {
+        check_hash_rows(text).unwrap();
+    }
+
+    #[test]
+    fn hash_of_a_prefix_equals_hash_of_the_whole_text_with_lengths_changing_past_the_prefix() {
+        // Found by proptest: with fewer than two characters per token kept, the tokens of the
+        // prefix differ once lowercasing lengthens and shortens characters around its end.
+        check_prefix_hash("ȺaaaaȺȺȺȺaȺaaaȺ\0ȺİaaaȺİȺ¡aİȺa¡00 00¡ ¡", 10).unwrap();
     }
 }

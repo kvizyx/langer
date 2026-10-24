@@ -189,6 +189,19 @@ cargo test --workspace
 cargo clippy --workspace --all-targets --all-features
 ```
 
+The tests include:
+
+- property tests ([proptest](https://proptest-rs.github.io/proptest/)) on random input. A case
+  proptest finds goes into an explicit, named test next to the property; the seeds it saves to
+  `proptest-regressions/` stay local (ignored by git);
+- snapshots ([insta](https://insta.rs)) of error bodies and the OpenAPI document in
+  `crates/langer/tests/snapshots/`. After an intended change, review and accept them with
+  [`cargo-insta`](https://insta.rs/docs/cli/):
+
+```bash
+cargo insta test --review
+```
+
 Tests that need external data are ignored by default.
 
 Parity with MediaPipe: see the [`langer_mediapipe` README](crates/langer_mediapipe/README.md#parity).
