@@ -45,10 +45,7 @@ struct ApiDoc;
 
 /// Default limit of request bodies: far more than any chat message. Detection time grows with
 /// the text, about 0.1 s for 64 KiB with `lingua`.
-pub const DEFAULT_BODY_LIMIT: NonZeroUsize = match NonZeroUsize::new(64 << 10) {
-    Some(bytes) => bytes,
-    None => NonZeroUsize::MIN,
-};
+pub const DEFAULT_BODY_LIMIT: NonZeroUsize = NonZeroUsize::new(64 << 10).expect("64 KiB is not zero");
 
 /// Builds the HTTP API over `service`. Bodies larger than `body_limit` bytes get `413`.
 pub fn router(service: Service, body_limit: NonZeroUsize) -> Router {

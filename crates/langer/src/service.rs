@@ -1,5 +1,5 @@
 //! Language detection independent of the transport: input checks, the `lingua` slots, running
-//! Lingua off the async threads, readiness, and errors that a transport maps to its own codes.
+//! Lingua off the async threads, readiness, and errors that transport maps to its own codes.
 
 use std::error::Error;
 use std::fmt;
@@ -14,10 +14,7 @@ use tokio::sync::Semaphore;
 use crate::detect::{Detection, Detectors, Method};
 
 /// `lingua` detections allowed in flight per CPU core: one running, three waiting.
-const LINGUA_SLOTS_PER_CORE: NonZeroUsize = match NonZeroUsize::new(4) {
-    Some(slots) => slots,
-    None => NonZeroUsize::MIN,
-};
+const LINGUA_SLOTS_PER_CORE: NonZeroUsize = NonZeroUsize::new(4).expect("4 is not zero");
 
 /// How long an overloaded client should wait before retrying.
 const RETRY_AFTER: Duration = Duration::from_secs(1);
