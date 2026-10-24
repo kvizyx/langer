@@ -9,5 +9,5 @@ expression: response
       "message": "unknown variant `fasttext`, expected `mediapipe` or `lingua` at line 1 column 35"
     }
   ],
-  "status_code": 400
+  "status_code": 422
 }

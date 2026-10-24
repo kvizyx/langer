@@ -69,7 +69,7 @@ expression: spec
           },
           "status_code": {
             "description": "HTTP status code of the response.",
-            "example": 400,
+            "example": 422,
             "format": "int32",
             "minimum": 0,
             "type": "integer"
@@ -191,7 +191,7 @@ expression: spec
                 }
               }
             },
-            "description": "Invalid body or empty text"
+            "description": "Body is not valid JSON"
           },
           "413": {
             "content": {
@@ -202,6 +202,16 @@ expression: spec
               }
             },
             "description": "Body larger than the limit"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "Valid JSON with invalid fields, or empty text"
           },
           "500": {
             "content": {

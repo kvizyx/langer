@@ -38,11 +38,12 @@ curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
   `iw` (Hebrew), `fil` (Filipino), romanized variants such as `zh-Latn`, and `unknown`. Lingua
   reports ISO 639-1 codes, or `unknown` when it cannot decide.
 - `confidence` is a number in `0..=1`; for `lingua` it is `null` when Lingua cannot decide.
-- Empty or whitespace-only text: `400 {"status_code":400,"detail":"Text cannot be empty"}`.
-- Invalid JSON, missing `text`, unknown `method` or unknown fields: `400` with
-  `"detail": "Body validation failed"` and the reason in `extra`.
+- Body that is not valid JSON: `400` with `"detail": "Body is not valid JSON"`.
+- Valid JSON with a missing `text`, a field of the wrong type, an unknown `method` or unknown
+  fields: `422` with `"detail": "Body validation failed"`. Both give the reason in `extra`.
+- Empty or whitespace-only text: `422 {"status_code":422,"detail":"Text cannot be empty"}`.
 - Body larger than `MAX_BODY_BYTES`: `413`. More `lingua` requests than `LINGUA_MAX_IN_FLIGHT`
-  at once: `503` with `Retry-After`. Every error, including unknown paths (`404`) and
+  at once: `503` with `Retry-After` and `Cache-Control: no-store`. Every error, including unknown paths (`404`) and
   methods (`405`), has the same `{"status_code", "detail", "extra"?}` shape.
 
 ### `GET /detect/languages`

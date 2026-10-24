@@ -15,6 +15,7 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::get;
 use serde::{Deserialize, Serialize};
+use serde_json::error::Category;
 use tokio::sync::Semaphore;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::CorsLayer;
@@ -157,7 +158,8 @@ fn openapi_response(spec: Option<Bytes>) -> Response {
 }
 
 async fn redirect_to_docs() -> Response {
-    (StatusCode::FOUND, [(header::LOCATION, DOCS_PATH)]).into_response()
+    // Permanent: these paths are fixed aliases of the API reference.
+    (StatusCode::PERMANENT_REDIRECT, [(header::LOCATION, DOCS_PATH)]).into_response()
 }
 
 async fn not_found() -> Response {
@@ -187,7 +189,7 @@ struct DetectRequest {
 #[schema(description = "Body of every error response.")]
 struct ErrorBody {
     /// HTTP status code of the response.
-    #[schema(example = 400)]
+    #[schema(example = 422)]
     status_code: u16,
     /// What went wrong.
     #[schema(example = "Text cannot be empty")]
@@ -242,9 +244,11 @@ fn overloaded() -> Response {
         "Too many lingua detections at once, retry later",
         Vec::new(),
     );
-    response
-        .headers_mut()
-        .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+    // A temporary condition: the client should retry soon, and nothing should cache this answer.
+    let headers = response.headers_mut();
+    headers.insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+
     response
 }
 
@@ -267,7 +271,8 @@ fn error(status: StatusCode, detail: impl Into<String>, extra: Vec<ErrorExtra>) 
     request_body = DetectRequest,
     responses(
         (status = 200, description = "Detected language", body = Detection),
-        (status = 400, description = "Invalid body or empty text", body = ErrorBody),
+        (status = 400, description = "Body is not valid JSON", body = ErrorBody),
+        (status = 422, description = "Valid JSON with invalid fields, or empty text", body = ErrorBody),
         (status = 413, description = "Body larger than the limit", body = ErrorBody),
         (status = 500, description = "Detection failed", body = ErrorBody),
         (status = 503, description = "Too many `lingua` detections at once; retry later", body = ErrorBody),
@@ -287,13 +292,20 @@ async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejectio
     let request: DetectRequest = match serde_json::from_slice(&body) {
         Ok(request) => request,
         Err(e) => {
+            // Malformed JSON is a bad request; well-formed JSON with wrong or missing fields is
+            // understood but cannot be processed.
+            let (status, detail) = match e.classify() {
+                Category::Data => (StatusCode::UNPROCESSABLE_ENTITY, "Body validation failed"),
+                Category::Syntax | Category::Eof | Category::Io => (StatusCode::BAD_REQUEST, "Body is not valid JSON"),
+            };
             let extra = vec![ErrorExtra { message: e.to_string() }];
-            return error(StatusCode::BAD_REQUEST, "Body validation failed", extra);
+
+            return error(status, detail, extra);
         }
     };
 
     if request.text.trim().is_empty() {
-        return error(StatusCode::BAD_REQUEST, "Text cannot be empty", Vec::new());
+        return error(StatusCode::UNPROCESSABLE_ENTITY, "Text cannot be empty", Vec::new());
     }
 
     let started = Instant::now();

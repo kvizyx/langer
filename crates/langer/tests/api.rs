@@ -101,22 +101,33 @@ async fn detect_with_mediapipe_returns_mediapipe_codes() {
 #[case::spaces("   ")]
 #[case::newlines_and_tabs("\n\t")]
 #[tokio::test]
-async fn detect_with_blank_text_returns_400(#[case] text: &str) {
+async fn detect_with_blank_text_returns_422(#[case] text: &str) {
     let (status, body) = post_detect(&json!({ "text": text }).to_string()).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body, json!({"status_code": 400, "detail": "Text cannot be empty"}));
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body, json!({"status_code": 422, "detail": "Text cannot be empty"}));
 }
 
 #[rstest]
 #[case::not_json("not_json", "not json")]
+#[case::truncated_json("truncated_json", r#"{"text": "hi""#)]
+#[tokio::test]
+async fn detect_with_malformed_json_returns_400(#[case] name: &str, #[case] body: &str) {
+    let (status, response) = post_detect(body).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    insta::assert_json_snapshot!(format!("invalid_body_{name}"), response);
+}
+
+#[rstest]
 #[case::missing_text("missing_text", r#"{"method": "lingua"}"#)]
 #[case::text_not_a_string("text_not_a_string", r#"{"text": 42}"#)]
 #[case::unknown_method("unknown_method", r#"{"text": "hi", "method": "fasttext"}"#)]
 #[case::unknown_field("unknown_field", r#"{"text": "hi", "methd": "lingua"}"#)]
 #[tokio::test]
-async fn detect_with_invalid_body_returns_400(#[case] name: &str, #[case] body: &str) {
+async fn detect_with_invalid_fields_returns_422(#[case] name: &str, #[case] body: &str) {
     let (status, response) = post_detect(body).await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     insta::assert_json_snapshot!(format!("invalid_body_{name}"), response);
 }
 
@@ -146,7 +157,7 @@ async fn docs_aliases_redirect_to_schema(#[values("/", "/docs")] uri: &str) {
         .oneshot(Request::get(uri).body(Body::empty()).expect("request is valid"))
         .await
         .expect("router is infallible");
-    assert_eq!(response.status(), StatusCode::FOUND);
+    assert_eq!(response.status(), StatusCode::PERMANENT_REDIRECT);
     assert_eq!(response.headers()[header::LOCATION], "/schema");
 }
 
@@ -227,4 +238,5 @@ async fn detect_with_lingua_over_the_in_flight_limit_returns_503() {
     let second = second.expect("router is infallible");
     assert_eq!(second.status(), StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(second.headers()[header::RETRY_AFTER], "1");
+    assert_eq!(second.headers()[header::CACHE_CONTROL], "no-store");
 }

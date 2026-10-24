@@ -9,5 +9,5 @@ expression: response
       "message": "unknown field `methd`, expected `text` or `method` at line 1 column 22"
     }
   ],
-  "status_code": 400
+  "status_code": 422
 }

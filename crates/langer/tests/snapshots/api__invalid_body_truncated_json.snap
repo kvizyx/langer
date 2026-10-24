@@ -1,0 +1,13 @@
+---
+source: crates/langer/tests/api.rs
+expression: response
+---
+{
+  "detail": "Body is not valid JSON",
+  "extra": [
+    {
+      "message": "EOF while parsing an object at line 1 column 13"
+    }
+  ],
+  "status_code": 400
+}

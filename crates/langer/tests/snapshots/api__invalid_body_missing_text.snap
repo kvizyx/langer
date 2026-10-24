@@ -9,5 +9,5 @@ expression: response
       "message": "missing field `text` at line 1 column 20"
     }
   ],
-  "status_code": 400
+  "status_code": 422
 }

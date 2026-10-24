@@ -3,7 +3,7 @@ source: crates/langer/tests/api.rs
 expression: response
 ---
 {
-  "detail": "Body validation failed",
+  "detail": "Body is not valid JSON",
   "extra": [
     {
       "message": "expected ident at line 1 column 2"
