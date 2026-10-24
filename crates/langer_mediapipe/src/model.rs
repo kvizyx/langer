@@ -89,6 +89,7 @@ impl Detector {
         if k == 0 {
             return Ok(Vec::new());
         }
+
         let ids = self.ngram.hash(text)?;
         let width = self.embeddings.iter().map(|(_, e)| e.width()).sum();
         let mut features = Vec::with_capacity(width);
@@ -98,6 +99,7 @@ impl Detector {
                 .ok_or_else(|| PredictError::new("embedding reads a missing n-gram head"))?;
             embedding.lookup_into(head_ids, &mut features)?;
         }
+
         let mut scores = self.dense.iter().fold(features, |x, layer| layer.apply(&x));
         softmax(&mut scores, self.softmax_beta);
 
@@ -107,9 +109,11 @@ impl Detector {
             .zip(scores)
             .map(|(language, probability)| Prediction { language, probability })
             .collect();
+
         // Stable, so ties keep model order.
         ranked.sort_by(|a, b| b.probability.total_cmp(&a.probability));
         ranked.truncate(k);
+
         Ok(ranked)
     }
 }
@@ -129,9 +133,11 @@ fn read_labels(model: &[u8]) -> Result<Box<[Box<str>]>, LoadError> {
     let mut file = archive
         .by_name(LABELS_FILE)
         .map_err(|e| LoadError::with_source("no labels.txt in the labels archive", e))?;
+
     let mut text = String::new();
     file.read_to_string(&mut text)
         .map_err(|e| LoadError::with_source("unreadable labels.txt", e))?;
+
     Ok(text.lines().map(|l| l.trim().into()).collect())
 }
 
@@ -156,17 +162,20 @@ impl<'a> Graph<'a> {
         if subgraphs.len() != 1 {
             return Err(LoadError::new("expected exactly one subgraph"));
         }
+
         let subgraph = subgraphs.get(0);
         let tensors = subgraph.tensors().ok_or_else(|| LoadError::new("no tensors"))?;
         let codes = model
             .operator_codes()
             .ok_or_else(|| LoadError::new("no operator codes"))?;
+
         let mut ops = Vec::new();
         for op in subgraph.operators().ok_or_else(|| LoadError::new("no operators"))? {
             let index = op.opcode_index() as usize;
             if index >= codes.len() {
                 return Err(LoadError::new("operator code index out of range"));
             }
+
             let code = codes.get(index);
             // TFLite resolves the code as the larger of the two fields.
             let builtin = fb::BuiltinOperator(code.builtin_code().0.max(i32::from(code.deprecated_builtin_code())));
@@ -176,6 +185,7 @@ impl<'a> Graph<'a> {
             };
             ops.push((kind, op));
         }
+
         Ok(Self {
             file,
             model,
@@ -207,6 +217,7 @@ impl<'a> Graph<'a> {
         {
             return Err(LoadError::new("unsupported Concatenation options"));
         }
+
         let mut embeddings = Vec::new();
         for part in ints(concat.inputs(), "Concatenation inputs")? {
             let op = self.producer(part, Kind::Custom("KmeansEmbeddingLookup"))?;
@@ -214,11 +225,13 @@ impl<'a> Graph<'a> {
             let [ids, codes, codebook] = ids[..] else {
                 return Err(LoadError::new("KmeansEmbeddingLookup needs three inputs"));
             };
+
             let head = heads
                 .iter()
                 .position(|&t| t == ids)
                 .ok_or_else(|| LoadError::new("KmeansEmbeddingLookup does not read an NGramHash head"))?;
             let embedding = self.embedding(codes, codebook)?;
+
             let &(_, vocab) = ngram
                 .heads
                 .get(head)
@@ -226,6 +239,7 @@ impl<'a> Graph<'a> {
             if u64::from(vocab) >= embedding.ids() as u64 {
                 return Err(LoadError::new("embedding table is smaller than the hash vocabulary"));
             }
+
             embeddings.push((head, embedding));
         }
 
@@ -256,7 +270,9 @@ impl<'a> Graph<'a> {
                 kind => return Err(LoadError::new(format!("unsupported operator {kind:?}"))),
             }
         }
+
         let softmax_op = softmax_op.ok_or_else(|| LoadError::new("the fully connected layers loop"))?;
+
         let beta = softmax_op
             .builtin_options_as_softmax_options()
             .ok_or_else(|| LoadError::new("Softmax has no options"))?
@@ -264,6 +280,7 @@ impl<'a> Graph<'a> {
         if !(beta.is_finite() && beta > 0.0) {
             return Err(LoadError::new(format!("invalid Softmax beta {beta}")));
         }
+
         if single(softmax_op.outputs(), "Softmax outputs")? != single(self.subgraph.outputs(), "subgraph outputs")? {
             return Err(LoadError::new("Softmax is not the model output"));
         }
@@ -296,16 +313,19 @@ impl<'a> Graph<'a> {
         let map = root
             .get_map()
             .map_err(|e| LoadError::with_source("invalid NGramHash options", e))?;
+
         let ints = |key: &str| -> Result<Vec<u64>, LoadError> {
             let vector = map
                 .index(key)
                 .and_then(|v| v.get_vector())
                 .map_err(|e| LoadError::with_source(format!("invalid NGramHash {key}"), e))?;
+
             vector
                 .iter()
                 .map(|v| u64::try_from(v.as_i64()).map_err(|e| LoadError::with_source(format!("negative {key}"), e)))
                 .collect()
         };
+
         let lengths = ints("ngram_lengths")?;
         let vocab_sizes = ints("vocab_sizes")?;
         if lengths.is_empty() || lengths.len() != vocab_sizes.len() {
@@ -315,6 +335,7 @@ impl<'a> Graph<'a> {
         if vocab_sizes.iter().any(|&v| v == 0 || v >= i32::MAX as u64) {
             return Err(LoadError::new("invalid NGramHash vocabulary size"));
         }
+
         let seed = map
             .index("seed")
             .map_err(|e| LoadError::with_source("NGramHash has no seed", e))?
@@ -332,6 +353,7 @@ impl<'a> Graph<'a> {
         if max_splits == 0 {
             return Err(LoadError::new("max_splits must be positive"));
         }
+
         let heads = lengths
             .into_iter()
             .zip(vocab_sizes)
@@ -340,11 +362,13 @@ impl<'a> Graph<'a> {
                     .ok()
                     .filter(|&n| n > 0)
                     .ok_or_else(|| LoadError::new("invalid n-gram length"))?;
+
                 let vocab =
                     u32::try_from(vocab).map_err(|e| LoadError::with_source("invalid NGramHash vocabulary size", e))?;
                 Ok((n, vocab))
             })
             .collect::<Result<_, _>>()?;
+
         Ok((
             op,
             NgramHash {
@@ -362,6 +386,7 @@ impl<'a> Graph<'a> {
         let (&[ids, codes_per_id], &[centroids, block]) = (codes_shape.as_slice(), book_shape.as_slice()) else {
             return Err(LoadError::new("embedding tensors must be matrices"));
         };
+
         let codes: Box<[u8]> = codes_data.into();
         if codes.len() != ids * codes_per_id || codes_per_id == 0 || block == 0 {
             return Err(LoadError::new("embedding code table has the wrong size"));
@@ -369,7 +394,9 @@ impl<'a> Graph<'a> {
         if codes.iter().any(|&c| usize::from(c) >= centroids) {
             return Err(LoadError::new("embedding code out of the codebook"));
         }
+
         let codebook = floats(book_data, centroids * block)?;
+
         Ok(KmeansEmbedding {
             codes,
             codes_per_id,
@@ -387,6 +414,7 @@ impl<'a> Graph<'a> {
             fb::ActivationFunctionType::RELU => true,
             other => return Err(LoadError::new(format!("unsupported activation {other:?}"))),
         };
+
         if !options.asymmetric_quantize_inputs()
             || options.weights_format() != fb::FullyConnectedOptionsWeightsFormat::DEFAULT
         {
@@ -394,9 +422,11 @@ impl<'a> Graph<'a> {
                 "only asymmetric hybrid FullyConnected layers are supported",
             ));
         }
+
         let [_, weights, bias] = ints(op.inputs(), "FullyConnected inputs")?[..] else {
             return Err(LoadError::new("FullyConnected needs weights and bias"));
         };
+
         let (shape, data) = self.tensor(weights, fb::TensorType::INT8)?;
         let [outputs, width] = shape[..] else {
             return Err(LoadError::new("FullyConnected weights must be a matrix"));
@@ -409,6 +439,7 @@ impl<'a> Graph<'a> {
                 "FullyConnected has {inputs} inputs, more than the supported {MAX_DENSE_INPUTS}"
             )));
         }
+
         let quantization = self
             .tensors
             .get(usize::try_from(weights).map_err(|e| LoadError::with_source("invalid tensor index", e))?)
@@ -423,11 +454,14 @@ impl<'a> Graph<'a> {
                 "only per-tensor symmetric weight quantization is supported",
             ));
         }
+
         let (bias_shape, bias_data) = self.tensor(bias, fb::TensorType::FLOAT32)?;
         if bias_shape[..] != [outputs] {
             return Err(LoadError::new("FullyConnected bias does not match the weights"));
         }
+
         let weights = data.iter().map(|&b| b.cast_signed()).collect();
+
         Ok(HybridDense::new(
             weights,
             inputs,
@@ -443,6 +477,7 @@ impl<'a> Graph<'a> {
         if index >= self.tensors.len() {
             return Err(LoadError::new("tensor index out of range"));
         }
+
         let tensor = self.tensors.get(index);
         if tensor.type_() != expected {
             return Err(LoadError::new(format!(
@@ -451,17 +486,20 @@ impl<'a> Graph<'a> {
                 tensor.type_()
             )));
         }
+
         let shape = tensor
             .shape()
             .map(|s| s.iter().map(usize::try_from).collect::<Result<Vec<_>, _>>())
             .transpose()
             .map_err(|e| LoadError::with_source("negative tensor dimension", e))?
             .unwrap_or_default();
+
         let buffers = self.model.buffers().ok_or_else(|| LoadError::new("no buffers"))?;
         let buffer_index = tensor.buffer() as usize;
         if buffer_index >= buffers.len() {
             return Err(LoadError::new("buffer index out of range"));
         }
+
         let buffer = buffers.get(buffer_index);
         let data = match buffer.data() {
             Some(data) => data.bytes(),
@@ -472,6 +510,7 @@ impl<'a> Graph<'a> {
                 .and_then(|(offset, size)| self.file.get(offset..offset.checked_add(size)?))
                 .ok_or_else(|| LoadError::new("tensor data out of range"))?,
         };
+
         Ok((shape, data))
     }
 
@@ -500,6 +539,7 @@ impl<'a> Graph<'a> {
             .enumerate()
             .flat_map(|(i, (_, op))| op.outputs().into_iter().flatten().map(move |t| (t, i)))
             .collect();
+
         producers
             .get(&tensor)
             .and_then(|&i| self.ops.get(i))

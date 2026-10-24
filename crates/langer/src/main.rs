@@ -72,8 +72,10 @@ fn load_detectors() -> anyhow::Result<Detectors> {
         duration_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
         "loaded MediaPipe language detector",
     );
+
     // Lingua's models are memory-mapped from the executable on first use; nothing to preload.
     let lingua = LanguageDetectorBuilder::from_all_languages().build();
+
     Ok(Detectors::new(mediapipe, lingua))
 }
 
@@ -81,6 +83,7 @@ fn load_detectors() -> anyhow::Result<Detectors> {
 /// (`net.ipv6.bindv6only = 0`). Falls back to IPv4 only where the kernel has no IPv6.
 async fn bind(port: u16) -> anyhow::Result<(TcpListener, SocketAddr)> {
     let dual_stack = SocketAddr::from((Ipv6Addr::UNSPECIFIED, port));
+
     match TcpListener::bind(dual_stack).await {
         Ok(listener) => Ok((listener, dual_stack)),
         Err(e) => {
@@ -90,10 +93,12 @@ async fn bind(port: u16) -> anyhow::Result<(TcpListener, SocketAddr)> {
                 error.message = %e,
                 "cannot listen on IPv6, listening on IPv4 only",
             );
+
             let ipv4 = SocketAddr::from((Ipv4Addr::UNSPECIFIED, port));
             let listener = TcpListener::bind(ipv4)
                 .await
                 .with_context(|| format!("cannot listen on {ipv4}"))?;
+
             Ok((listener, ipv4))
         }
     }
@@ -101,17 +106,21 @@ async fn bind(port: u16) -> anyhow::Result<(TcpListener, SocketAddr)> {
 
 async fn serve(port: u16, detectors: Detectors, limits: Limits) -> anyhow::Result<()> {
     let (listener, addr) = bind(port).await?;
+
     let listener = listener.tap_io(|tcp| {
         // Responses are small and written at once; don't let Nagle delay them.
         if let Err(e) = tcp.set_nodelay(true) {
             tracing::event!(name: "server.nodelay.failure", Level::WARN, error.message = %e, "cannot set TCP_NODELAY");
         }
     });
+
     tracing::event!(name: "server.listen.success", Level::INFO, server.address = %addr, "server is listening");
     axum::serve(listener, langer::router(detectors, limits))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
+
     tracing::event!(name: "server.shutdown.success", Level::INFO, "server is stopped");
+
     Ok(())
 }
 
@@ -123,6 +132,7 @@ async fn shutdown_signal() {
             std::future::pending::<()>().await;
         }
     };
+
     #[cfg(unix)]
     let terminate = async {
         match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
@@ -137,6 +147,7 @@ async fn shutdown_signal() {
     };
     #[cfg(not(unix))]
     let terminate = std::future::pending::<()>();
+
     tokio::select! {
         () = ctrl_c => {},
         () = terminate => {},

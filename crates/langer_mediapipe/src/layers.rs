@@ -40,23 +40,27 @@ impl KmeansEmbedding {
                 .chunks_exact(self.codes_per_id)
                 .nth(id as usize)
                 .ok_or_else(|| PredictError::new("n-gram id outside the embedding table"))?;
+
             for (block, &code) in sum.chunks_exact_mut(self.block).zip(codes) {
                 let centroid = self
                     .codebook
                     .chunks_exact(self.block)
                     .nth(usize::from(code))
                     .ok_or_else(|| PredictError::new("embedding code outside the codebook"))?;
+
                 for (s, c) in block.iter_mut().zip(centroid) {
                     *s += c;
                 }
             }
         }
+
         #[expect(
             clippy::cast_precision_loss,
             reason = "the id count is bounded by max_splits, far below 2^24"
         )]
         let count = count.max(1) as f32;
         out.extend(sum.iter().map(|s| s / count));
+
         Ok(())
     }
 }
@@ -112,6 +116,7 @@ impl HybridDense {
 
     pub(crate) fn apply(&self, input: &[f32]) -> Vec<f32> {
         let (quantized, input_scale, zero_point) = quantize_dynamic(input);
+
         let rows = self.weights.chunks_exact(self.inputs).zip(&self.row_sums);
         rows.zip(&self.bias)
             .map(|((row, &row_sum), &bias)| {
@@ -120,6 +125,7 @@ impl HybridDense {
                     .zip(&quantized)
                     .map(|(&w, &q)| i32::from(w) * i32::from(q))
                     .sum();
+
                 #[expect(
                     clippy::cast_precision_loss,
                     reason = "XNNPACK converts the i32 accumulator to f32 the same way"
@@ -139,6 +145,7 @@ impl HybridDense {
 fn quantize_dynamic(values: &[f32]) -> (Vec<i8>, f32, i32) {
     const QMIN: f32 = -128.0;
     const QMAX: f32 = 127.0;
+
     let rmin = values.iter().copied().fold(0.0_f32, f32::min);
     let rmax = values.iter().copied().fold(0.0_f32, f32::max);
     // `rmin == rmax` only when every value is zero.
@@ -147,6 +154,7 @@ fn quantize_dynamic(values: &[f32]) -> (Vec<i8>, f32, i32) {
     } else {
         1.0
     };
+
     let descaled_min = rmin * multiplier;
     let descaled_max = rmax * multiplier;
     let zero_point = if (QMIN + descaled_min) + (QMAX + descaled_max) > 0.0 {
@@ -161,6 +169,7 @@ fn quantize_dynamic(values: &[f32]) -> (Vec<i8>, f32, i32) {
     let zero_point = zero_point.clamp(QMIN, QMAX).round_ties_even() as i32;
     #[expect(clippy::cast_precision_loss, reason = "the zero point is in -128..=127")]
     let zero_point_f = zero_point as f32;
+
     let quantized = values
         .iter()
         .map(|&v| {
@@ -172,6 +181,7 @@ fn quantize_dynamic(values: &[f32]) -> (Vec<i8>, f32, i32) {
             q
         })
         .collect();
+
     (quantized, 1.0 / multiplier, zero_point)
 }
 
@@ -183,6 +193,7 @@ pub(crate) fn softmax(values: &mut [f32], beta: f32) {
         *v = ((*v - max) * beta).exp();
         sum += *v;
     }
+
     for v in values.iter_mut() {
         *v /= sum;
     }

@@ -16,12 +16,14 @@ pub(crate) fn hash64(data: &[u8], seed: u64) -> u64 {
     // Lossless: usize is at most 64 bits on every target Rust supports.
     let len = data.len() as u64;
     let mut hash = seed ^ len.wrapping_mul(MUL);
+
     let (words, tail) = data.as_chunks::<8>();
     for word in words {
         let v = u64::from_le_bytes(*word);
         hash ^= shift_mix(v.wrapping_mul(MUL)).wrapping_mul(MUL);
         hash = hash.wrapping_mul(MUL);
     }
+
     if !tail.is_empty() {
         let mut last = [0; 8];
         for (byte, &tail_byte) in last.iter_mut().zip(tail) {
@@ -30,6 +32,7 @@ pub(crate) fn hash64(data: &[u8], seed: u64) -> u64 {
         hash ^= u64::from_le_bytes(last);
         hash = hash.wrapping_mul(MUL);
     }
+
     shift_mix(shift_mix(hash).wrapping_mul(MUL))
 }
 

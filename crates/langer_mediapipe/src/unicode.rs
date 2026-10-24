@@ -25,17 +25,20 @@ pub(crate) fn is_alpha(c: u32) -> bool {
 /// `utf_tolowerrune`.
 pub(crate) fn to_lower(c: u32) -> u32 {
     let shift = |delta: i32| c.checked_add_signed(delta).unwrap_or(c);
+
     if let Some(&(start, end, delta)) = last_starting_at_or_before(LOWER_RANGES, c, |r| r.0)
         && (start..=end).contains(&c)
     {
         return shift(delta);
     }
+
     if let Some(&(start, end, delta)) = last_starting_at_or_before(LOWER_PAIRS, c, |r| r.0)
         && (start..=end).contains(&c)
         && (c - start).is_multiple_of(2)
     {
         return shift(delta);
     }
+
     match LOWER_SINGLES.binary_search_by_key(&c, |&(cp, _)| cp) {
         Ok(i) => LOWER_SINGLES.get(i).map_or(c, |&(_, delta)| shift(delta)),
         Err(_) => c,
@@ -64,6 +67,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Decoded {
     if b0 < 0x80 {
         return Decoded::Rune(u32::from(b0), 1);
     }
+
     let bad = Decoded::Rune(REPLACEMENT, 1);
     // Payload of continuation byte `i`, or `None` if it is not a continuation byte.
     let cont = |i: usize| -> Option<u32> {
@@ -105,6 +109,7 @@ pub(crate) fn decode(bytes: &[u8]) -> Decoded {
             Decoded::Rune(rune, 4)
         };
     }
+
     bad
 }
 

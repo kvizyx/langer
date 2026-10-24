@@ -90,10 +90,12 @@ impl Detectors {
             message: "MediaPipe failed",
             source: Some(e),
         })?;
+
         let top = top.first().ok_or(DetectError {
             message: "MediaPipe returned no prediction",
             source: None,
         })?;
+
         Ok(Detection {
             language: top.language.to_owned(),
             confidence: Some(widen(top.probability)),
@@ -110,6 +112,7 @@ impl Detectors {
             Some((language, confidence)) => (language.iso_code_639_1().to_string(), Some(confidence)),
             None => (UNKNOWN.to_owned(), None),
         };
+
         Detection {
             language,
             confidence,

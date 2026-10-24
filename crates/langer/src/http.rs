@@ -191,12 +191,14 @@ fn panic_response(panic: Box<dyn Any + Send + 'static>) -> Response {
         .copied()
         .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
         .unwrap_or("unknown panic");
+
     tracing::event!(
         name: "request.panic",
         tracing::Level::ERROR,
         error.message = message,
         "request handler panicked",
     );
+
     error(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error", Vec::new())
 }
 
@@ -207,6 +209,7 @@ fn overloaded() -> Response {
         tracing::Level::WARN,
         "too many lingua detections at once",
     );
+
     let mut response = error(
         StatusCode::SERVICE_UNAVAILABLE,
         "Too many lingua detections at once, retry later",
@@ -253,6 +256,7 @@ async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejectio
             return error(rejection.status(), "Cannot read the request body", extra);
         }
     };
+
     let request: DetectRequest = match serde_json::from_slice(&body) {
         Ok(request) => request,
         Err(e) => {
@@ -260,6 +264,7 @@ async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejectio
             return error(StatusCode::BAD_REQUEST, "Body validation failed", extra);
         }
     };
+
     if request.text.trim().is_empty() {
         return error(StatusCode::BAD_REQUEST, "Text cannot be empty", Vec::new());
     }
@@ -267,12 +272,14 @@ async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejectio
     let started = Instant::now();
     let text_len = request.text.chars().count();
     let method = request.method;
+
     let detection = match method {
         Method::MediaPipe => state.detectors.detect(&request.text, method).map_err(|e| e.to_string()),
         Method::Lingua => {
             let Ok(slot) = Arc::clone(&state.lingua_slots).try_acquire_owned() else {
                 return overloaded();
             };
+
             let detectors = state.detectors;
             tokio::task::spawn_blocking(move || {
                 // Released when the detection ends, even if the client is gone by then.
@@ -284,6 +291,7 @@ async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejectio
             .and_then(|result| result.map_err(|e| e.to_string()))
         }
     };
+
     let detection = match detection {
         Ok(detection) => detection,
         Err(message) => {
@@ -294,6 +302,7 @@ async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejectio
                 error.message = message,
                 "language detection failed",
             );
+
             return error(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Language detection failed",
@@ -301,6 +310,7 @@ async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejectio
             );
         }
     };
+
     tracing::event!(
         name: "detect.request.success",
         tracing::Level::DEBUG,
@@ -311,6 +321,7 @@ async fn detect(State(state): State<AppState>, body: Result<Bytes, BytesRejectio
         duration_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
         "detected language",
     );
+
     (StatusCode::OK, Json(detection)).into_response()
 }
 

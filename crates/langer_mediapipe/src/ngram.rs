@@ -40,6 +40,7 @@ impl NgramHash {
             .nth(CHARS_PER_TOKEN.saturating_mul(self.max_splits))
             .and_then(|(end, _)| text.get(..end))
             .unwrap_or(text);
+
         self.hash_all(prefix)
     }
 
@@ -51,6 +52,7 @@ impl NgramHash {
             text.as_bytes().to_vec()
         };
         let tokens = tokenize(&input, text.len(), self.max_splits);
+
         self.heads
             .iter()
             .map(|&(n, vocab)| {
@@ -59,6 +61,7 @@ impl NgramHash {
                         let bytes = tokens
                             .span(start, (start + n).min(tokens.len()))
                             .ok_or_else(|| PredictError::new("n-gram outside the tokens"))?;
+
                         let bucket = murmur::hash64(bytes, self.seed) % u64::from(vocab);
                         #[expect(
                             clippy::cast_possible_truncation,
@@ -123,6 +126,7 @@ fn tokenize(input: &[u8], len: usize, max_tokens: usize) -> Tokens {
         offsets: vec![0],
     };
     tokens.push(&[PREFIX]);
+
     let mut i = 0;
     while let Some(rest) = window.get(i..).filter(|rest| !rest.is_empty())
         && tokens.len() + 1 < max_tokens
@@ -139,6 +143,7 @@ fn tokenize(input: &[u8], len: usize, max_tokens: usize) -> Tokens {
         }
         i += read;
     }
+
     tokens.push(&[SUFFIX]);
     tokens
 }

@@ -23,6 +23,7 @@ struct Language {
 
 fn main() -> anyhow::Result<()> {
     println!("cargo::rerun-if-changed={SOURCE}");
+
     let source = fs::read_to_string(SOURCE).with_context(|| format!("cannot read {SOURCE}"))?;
     let languages: Vec<Language> =
         serde_json::from_str(&source).with_context(|| format!("{SOURCE} is not a JSON array of languages"))?;
@@ -33,11 +34,13 @@ fn main() -> anyhow::Result<()> {
             !language.iso_639_1.is_empty() && !language.name.is_empty(),
             "{SOURCE}: empty code or name"
         );
+
         ensure!(
             !language.methods.is_empty(),
             "{SOURCE}: {} has no methods",
             language.iso_639_1
         );
+
         for method in &language.methods {
             ensure!(
                 METHODS.contains(&method.as_str()),
@@ -45,6 +48,7 @@ fn main() -> anyhow::Result<()> {
                 language.iso_639_1
             );
         }
+
         let duplicate = by_code.insert(language.iso_639_1.as_str(), language);
         ensure!(duplicate.is_none(), "{SOURCE}: duplicate code {}", language.iso_639_1);
     }
@@ -53,5 +57,6 @@ fn main() -> anyhow::Result<()> {
     let sorted: Vec<&Language> = by_code.values().copied().collect();
     let json = serde_json::to_string(&sorted)?;
     fs::write(out.join("languages.json"), json).context("cannot write to OUT_DIR")?;
+
     Ok(())
 }
