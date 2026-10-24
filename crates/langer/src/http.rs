@@ -3,6 +3,7 @@
 use std::any::Any;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Instant;
 
@@ -41,7 +42,7 @@ const SCALAR_TEMPLATE: &str = include_str!("../assets/scalar.html");
     ),
     tags(
         (name = "Detect", description = "Language detection and supported languages"),
-        (name = "Health", description = "Service status"),
+        (name = "Health", description = "Whether the service is running and able to serve detections"),
     )
 )]
 struct ApiDoc;
@@ -82,23 +83,46 @@ impl Default for Limits {
     }
 }
 
+/// Whether the service takes new work, shared between the router and whoever stops it.
+///
+/// Cloning gives a handle to the same state.
+#[derive(Clone, Debug, Default)]
+pub struct Readiness {
+    shutting_down: Arc<AtomicBool>,
+}
+
+impl Readiness {
+    /// Marks the service as shutting down: `GET /health/ready` answers `503` from now on, while
+    /// requests are still served until the server stops.
+    pub fn shut_down(&self) {
+        self.shutting_down.store(true, Ordering::Relaxed);
+    }
+
+    fn is_shutting_down(&self) -> bool {
+        self.shutting_down.load(Ordering::Relaxed)
+    }
+}
+
 /// State shared by the request handlers.
 #[derive(Clone, Debug)]
 struct AppState {
     detectors: Detectors,
     /// One permit per `lingua` detection allowed in flight.
     lingua_slots: Arc<Semaphore>,
+    readiness: Readiness,
 }
 
 /// Builds the application router.
-pub fn router(detectors: Detectors, limits: Limits) -> Router {
+pub fn router(detectors: Detectors, limits: Limits, readiness: Readiness) -> Router {
     let (api, openapi) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .routes(routes!(detect))
         .routes(routes!(languages))
         .routes(routes!(health))
+        .routes(routes!(ready))
         .with_state(AppState {
             detectors,
             lingua_slots: Arc::new(Semaphore::new(limits.lingua_in_flight.get())),
+            readiness,
         })
         .split_for_parts();
 
@@ -377,25 +401,64 @@ async fn languages() -> Response {
     ([(header::CONTENT_TYPE, "application/json")], languages::JSON).into_response()
 }
 
-/// Health of the service.
+/// Body of a successful health check.
 #[derive(Debug, Serialize, ToSchema)]
-#[schema(description = "Health of the service.")]
+#[schema(description = "Body of a successful health check.")]
 struct Health {
-    /// Always `ok` while the service is up.
+    /// Always `ok`.
     #[schema(example = "ok")]
     status: &'static str,
 }
 
-/// Health check.
+/// Text and expected language of the readiness self-check.
+const SELF_CHECK: (&str, &str) = ("Hello, how are you today?", "en");
+
+/// Liveness: whether the process is up.
 #[utoipa::path(
     get,
     path = "/health",
     tag = "Health",
-    summary = "Health check",
-    responses((status = 200, description = "Service is up", body = Health))
+    summary = "Check that the service is running",
+    description = "Answers `200` as long as the process runs and handles requests. It checks nothing else on purpose: a busy or shutting down service is still alive, and restarting it would not help. Whether it can take requests is `GET /health/ready`.",
+    responses((status = 200, description = "The service is running", body = Health))
 )]
 async fn health() -> Json<Health> {
     Json(Health { status: "ok" })
+}
+
+/// Readiness: whether the service can take requests.
+#[utoipa::path(
+    get,
+    path = "/health/ready",
+    tag = "Health",
+    summary = "Check that the service can take requests",
+    description = "Answers `200` when the service is not shutting down and `mediapipe` detects the language of a fixed English text correctly (about 20 µs). Answers `503` once the service starts shutting down, a few seconds before it stops accepting connections (`SHUTDOWN_DELAY_SECS`), so that traffic can move to other instances; requests are still served meanwhile. Load does not affect it: excess `lingua` requests get their own `503`.",
+    responses(
+        (status = 200, description = "The service can take requests", body = Health),
+        (status = 503, description = "The service is shutting down or failed its self-check", body = ErrorBody),
+    )
+)]
+async fn ready(State(state): State<AppState>) -> Response {
+    if state.readiness.is_shutting_down() {
+        return error(StatusCode::SERVICE_UNAVAILABLE, "Shutting down", Vec::new());
+    }
+
+    let (text, expected) = SELF_CHECK;
+    let problem = match state.detectors.detect(text, Method::MediaPipe) {
+        Ok(detection) if detection.language == expected => return Json(Health { status: "ok" }).into_response(),
+        Ok(detection) => format!("detected {:?} instead of {expected:?}", detection.language),
+        Err(e) => e.to_string(),
+    };
+
+    tracing::event!(
+        name: "health.self_check.failure",
+        tracing::Level::ERROR,
+        error.message = problem,
+        "readiness self-check failed",
+    );
+
+    let extra = vec![ErrorExtra { message: problem }];
+    error(StatusCode::SERVICE_UNAVAILABLE, "Self-check failed", extra)
 }
 
 #[cfg(test)]

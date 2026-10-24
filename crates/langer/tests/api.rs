@@ -8,7 +8,7 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
-use langer::{Detectors, Limits};
+use langer::{Detectors, Limits, Readiness};
 use langer_mediapipe::Detector;
 use lingua::Language::{English, French, Russian};
 use lingua::LanguageDetectorBuilder;
@@ -31,11 +31,30 @@ fn app() -> Router {
 }
 
 fn app_with(limits: Limits) -> Router {
+    app_with_readiness(limits, Readiness::default())
+}
+
+fn app_with_readiness(limits: Limits, readiness: Readiness) -> Router {
     let lingua = LanguageDetectorBuilder::from_languages(&[English, French, Russian]).build();
     langer::router(
         Detectors::new(Detector::new().expect("the bundled model loads"), lingua),
         limits,
+        readiness,
     )
+}
+
+/// Status and JSON body of `request` sent to `app`.
+async fn call(app: Router, request: Request<Body>) -> (StatusCode, Value) {
+    let response = app.oneshot(request).await.expect("router is infallible");
+    let status = response.status();
+    let body = response
+        .into_body()
+        .collect()
+        .await
+        .expect("body is readable")
+        .to_bytes();
+
+    (status, serde_json::from_slice(&body).expect("response is JSON"))
 }
 
 async fn send(request: Request<Body>) -> (StatusCode, Vec<u8>) {
@@ -148,6 +167,38 @@ async fn health_returns_ok() {
         serde_json::from_slice::<Value>(&body).expect("JSON"),
         json!({"status": "ok"})
     );
+}
+
+#[tokio::test]
+async fn ready_returns_ok_while_serving() {
+    let (status, body) = get("/health/ready").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        serde_json::from_slice::<Value>(&body).expect("JSON"),
+        json!({"status": "ok"})
+    );
+}
+
+#[tokio::test]
+async fn ready_returns_503_while_shutting_down_but_detection_still_works() {
+    let readiness = Readiness::default();
+    let app = app_with_readiness(Limits::default(), readiness.clone());
+
+    readiness.shut_down();
+
+    let ready = Request::get("/health/ready")
+        .body(Body::empty())
+        .expect("request is valid");
+    let (status, body) = call(app.clone(), ready).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body, json!({"status_code": 503, "detail": "Shutting down"}));
+
+    let detect = Request::post("/detect")
+        .body(Body::from(r#"{"text": "Привет"}"#))
+        .expect("request is valid");
+    let (status, _) = call(app, detect).await;
+    assert_eq!(status, StatusCode::OK);
 }
 
 #[rstest]

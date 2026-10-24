@@ -96,10 +96,10 @@ expression: spec
         "type": "object"
       },
       "Health": {
-        "description": "Health of the service.",
+        "description": "Body of a successful health check.",
         "properties": {
           "status": {
-            "description": "Always `ok` while the service is up.",
+            "description": "Always `ok`.",
             "example": "ok",
             "type": "string"
           }
@@ -267,6 +267,7 @@ expression: spec
     },
     "/health": {
       "get": {
+        "description": "Answers `200` as long as the process runs and handles requests. It checks nothing else on purpose: a busy or shutting down service is still alive, and restarting it would not help. Whether it can take requests is `GET /health/ready`.",
         "operationId": "health",
         "responses": {
           "200": {
@@ -277,10 +278,42 @@ expression: spec
                 }
               }
             },
-            "description": "Service is up"
+            "description": "The service is running"
           }
         },
-        "summary": "Health check",
+        "summary": "Check that the service is running",
+        "tags": [
+          "Health"
+        ]
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "description": "Answers `200` when the service is not shutting down and `mediapipe` detects the language of a fixed English text correctly (about 20 µs). Answers `503` once the service starts shutting down, a few seconds before it stops accepting connections (`SHUTDOWN_DELAY_SECS`), so that traffic can move to other instances; requests are still served meanwhile. Load does not affect it: excess `lingua` requests get their own `503`.",
+        "operationId": "ready",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "The service can take requests"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "The service is shutting down or failed its self-check"
+          }
+        },
+        "summary": "Check that the service can take requests",
         "tags": [
           "Health"
         ]
@@ -293,7 +326,7 @@ expression: spec
       "name": "Detect"
     },
     {
-      "description": "Service status",
+      "description": "Whether the service is running and able to serve detections",
       "name": "Health"
     }
   ]

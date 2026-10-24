@@ -4,12 +4,12 @@ use std::io::IsTerminal;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::num::NonZeroUsize;
 use std::thread;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use axum::serve::ListenerExt;
 use clap::Parser;
-use langer::{Detectors, Limits};
+use langer::{Detectors, Limits, Readiness};
 use langer_mediapipe::Detector;
 use lingua::LanguageDetectorBuilder;
 use tokio::net::TcpListener;
@@ -32,6 +32,10 @@ struct Config {
     /// Most `lingua` detections running or queued at once; more get 503. Defaults to four per core.
     #[arg(long, env = "LINGUA_MAX_IN_FLIGHT", default_value_t = Limits::default().lingua_in_flight)]
     lingua_max_in_flight: NonZeroUsize,
+    /// Seconds between a stop signal and closing the listener, while `GET /health/ready` answers
+    /// 503 and requests are still served.
+    #[arg(long, env = "SHUTDOWN_DELAY_SECS", default_value_t = 5)]
+    shutdown_delay_secs: u64,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -59,6 +63,7 @@ fn main() -> anyhow::Result<()> {
                 body_bytes: config.max_body_bytes,
                 lingua_in_flight: config.lingua_max_in_flight,
             },
+            Duration::from_secs(config.shutdown_delay_secs),
         ))
 }
 
@@ -104,7 +109,7 @@ async fn bind(port: u16) -> anyhow::Result<(TcpListener, SocketAddr)> {
     }
 }
 
-async fn serve(port: u16, detectors: Detectors, limits: Limits) -> anyhow::Result<()> {
+async fn serve(port: u16, detectors: Detectors, limits: Limits, shutdown_delay: Duration) -> anyhow::Result<()> {
     let (listener, addr) = bind(port).await?;
 
     let listener = listener.tap_io(|tcp| {
@@ -115,13 +120,30 @@ async fn serve(port: u16, detectors: Detectors, limits: Limits) -> anyhow::Resul
     });
 
     tracing::event!(name: "server.listen.success", Level::INFO, server.address = %addr, "server is listening");
-    axum::serve(listener, langer::router(detectors, limits))
-        .with_graceful_shutdown(shutdown_signal())
+
+    let readiness = Readiness::default();
+    axum::serve(listener, langer::router(detectors, limits, readiness.clone()))
+        .with_graceful_shutdown(shut_down(readiness, shutdown_delay))
         .await?;
 
     tracing::event!(name: "server.shutdown.success", Level::INFO, "server is stopped");
 
     Ok(())
+}
+
+/// Resolves when the server should stop accepting connections: a stop signal, then
+/// `delay` of reporting not ready while still serving, so that clients move to other instances.
+async fn shut_down(readiness: Readiness, delay: Duration) {
+    shutdown_signal().await;
+
+    readiness.shut_down();
+    tracing::event!(
+        name: "server.shutdown.start",
+        Level::INFO,
+        shutdown.delay_secs = delay.as_secs(),
+        "server is shutting down",
+    );
+    tokio::time::sleep(delay).await;
 }
 
 /// Resolves on Ctrl+C or SIGTERM (sent by Kubernetes before killing the pod).

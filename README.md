@@ -58,11 +58,18 @@ The list lives in [`crates/langer/data/languages.json`](crates/langer/data/langu
 `build.rs` validates it and compiles it into the response body. Tests check it against the
 MediaPipe model's labels and the `lingua` crate.
 
-### `GET /health`
+### `GET /health` and `GET /health/ready`
 
-```json
-{"status": "ok"}
-```
+Both answer `{"status": "ok"}` with `200` when all is well.
+
+- `/health` (liveness) answers as long as the process runs, and checks nothing else: a busy or
+  shutting down service is still alive, and restarting it would not help.
+- `/health/ready` (readiness) answers `200` when the service can take requests: it is not shutting
+  down, and `mediapipe` detects a fixed English text correctly (about 20 µs). It answers `503`
+  with the usual error body otherwise. On a stop signal it turns `503` at once, and the service
+  keeps serving for `SHUTDOWN_DELAY_SECS` before it stops accepting connections, so that traffic
+  moves to other instances first. Load does not affect it: excess `lingua` requests get their
+  own `503`.
 
 ## Configuration
 
@@ -71,6 +78,7 @@ MediaPipe model's labels and the `lingua` crate.
 | `PORT` | `3000` | HTTP port |
 | `LOG_LEVEL` | `info` | `tracing` log filter (`warn`, `info,langer=debug`, ...); an invalid one stops the start |
 | `MAX_BODY_BYTES` | `65536` | largest accepted request body; detection time grows with the text, about 0.1 s for 64 KiB with `lingua` |
+| `SHUTDOWN_DELAY_SECS` | `5` | seconds between a stop signal and closing the listener, during which `/health/ready` answers `503` and requests are still served; `0` for local runs |
 | `LINGUA_MAX_IN_FLIGHT` | 4 per CPU core | most `lingua` detections running or queued at once; more get `503` with `Retry-After: 1` |
 
 Both models are embedded in the executable; there is nothing else to configure.
