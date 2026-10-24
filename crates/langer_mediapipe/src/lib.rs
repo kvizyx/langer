@@ -7,8 +7,9 @@
 //! The model hashes character n-grams of the text (`NGramHash`), averages k-means compressed
 //! embeddings of the hashes (`KmeansEmbeddingLookup`), and classifies the result with
 //! fully connected layers that have `i8` weights. Each step mirrors the MediaPipe custom ops
-//! and the TFLite reference kernels, including MediaPipe's Plan 9 Unicode tables and
-//! TFLite's dynamic input quantization, so predictions match MediaPipe's.
+//! and the kernels of TFLite's XNNPACK delegate, which MediaPipe runs the model with, including
+//! MediaPipe's Plan 9 Unicode tables and XNNPACK's dynamic input quantization, so predictions
+//! match MediaPipe's.
 //!
 //! # Examples
 //!

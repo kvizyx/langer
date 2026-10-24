@@ -5,10 +5,13 @@ in pure Rust: no TFLite runtime, no C++, the ~300 KiB model embedded in the libr
 the same predictions as MediaPipe (see [Parity](#parity)).
 
 ```rust
-let detector = langer_mediapipe::Detector::new();
-let top = detector.predict("Привет, как дела?", 1);
+let detector = langer_mediapipe::Detector::new()?;
+let top = detector.predict("Привет, как дела?", 1)?;
 assert_eq!(top[0].language, "ru");
 ```
+
+Loading checks the whole model, and prediction never panics: both return errors instead,
+including for models other than the bundled one.
 
 ## How it works
 
@@ -87,22 +90,14 @@ vendir sync && git diff --exit-code vendor/
 
 ## Parity
 
-`tests/reference.rs` (ignored by default) compares predictions with MediaPipe's. `LANGER_MP_TEXTS`
-is a file with one text per line, `LANGER_MP_REFERENCE` holds MediaPipe's top-3 result for each
-line as `code probability` pairs, e.g. from the Python `mediapipe` package with
-`LanguageDetectorOptions(max_results=3)`:
-
-```bash
-LANGER_MP_TEXTS=texts.txt LANGER_MP_REFERENCE=reference.txt cargo test --release -p langer_mediapipe --test reference -- --ignored --nocapture
-```
-
-On 97 439 texts (Lingua's test data, papluca/language-identification, and edge cases: emoji,
-digits, long and mixed-script texts, random Unicode) the top language matches MediaPipe 1.1.1 for
-every text, with probabilities within 1e-5 for all but 6. Those 6 contain characters whose lowercase form is shorter in UTF-8 (two or
-more Turkish `İ`, for example): MediaPipe then tokenizes past the end of its lowercased buffer and
+Compared with MediaPipe 1.1.1 on 97 439 texts (Lingua's test data,
+papluca/language-identification, and edge cases: emoji, digits, long and mixed-script texts,
+random Unicode), the top language matches for every text, with probabilities within 1e-5 for
+all but 6. Those 6 contain characters whose lowercase form is shorter in UTF-8 (two or more
+Turkish `İ`, for example): MediaPipe then tokenizes past the end of its lowercased buffer and
 reads uninitialized memory, which cannot be reproduced. Their top language still matches.
 
-Benchmark:
+## Benchmark
 
 ```bash
 cargo bench -p langer_mediapipe

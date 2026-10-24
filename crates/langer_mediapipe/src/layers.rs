@@ -1,4 +1,5 @@
-//! Numeric ops of the model, following the TFLite reference kernels.
+//! Numeric ops of the model, following the kernels MediaPipe runs it with (TFLite's XNNPACK
+//! delegate for the fully connected layers).
 
 use crate::PredictError;
 
