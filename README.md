@@ -42,9 +42,12 @@ curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
 - Valid JSON with a missing `text`, a field of the wrong type, an unknown `method` or unknown
   fields: `422` with `"detail": "Body validation failed"`. Both give the reason in `extra`.
 - Empty or whitespace-only text: `422 {"status_code":422,"detail":"Text cannot be empty"}`.
-- Body larger than `MAX_BODY_BYTES`: `413`. More `lingua` requests than `LINGUA_MAX_IN_FLIGHT`
-  at once: `503` with `Retry-After` and `Cache-Control: no-store`. Every error, including unknown paths (`404`) and
-  methods (`405`), has the same `{"status_code", "detail", "extra"?}` shape.
+- Body larger than `MAX_BODY_BYTES`: `413`.
+- More `lingua` requests than `LINGUA_MAX_IN_FLIGHT` at once: `503` with `Retry-After` and
+  `Cache-Control: no-store`.
+
+Every error, including unknown paths (`404`) and methods (`405`), has the same
+`{"status_code", "detail", "extra"?}` shape.
 
 ### `GET /detect/languages`
 
@@ -78,38 +81,57 @@ Both answer `{"status": "ok"}` with `200` when all is well.
 | `PORT` | `3000` | HTTP port |
 | `LOG_LEVEL` | `info` | `tracing` log filter (`warn`, `info,langer=debug`, ...); an invalid one stops the start |
 | `MAX_BODY_BYTES` | `65536` | largest accepted request body; detection time grows with the text, about 0.1 s for 64 KiB with `lingua` |
-| `SHUTDOWN_DELAY_SECS` | `5` | seconds between a stop signal and closing the listener, during which `/health/ready` answers `503` and requests are still served; `0` for local runs |
 | `LINGUA_MAX_IN_FLIGHT` | 4 per CPU core | most `lingua` detections running or queued at once; more get `503` with `Retry-After: 1` |
+| `SHUTDOWN_DELAY_SECS` | `5` | seconds between a stop signal and closing the listener, during which `/health/ready` answers `503` and requests are still served; `0` for local runs |
 
 Both models are embedded in the executable; there is nothing else to configure.
 
 ## Accuracy
 
-Datasets:
+Lingua's test data (Wortschatz Leipzig): 1000 single words, word pairs and sentences for each of
+the 70 languages both methods detect; the score is the mean of the per-language accuracies, as in
+Lingua's own reports. One core, release build. The data comes from the same source as Lingua's
+training data, which favors Lingua.
 
-- Lingua's test data (Wortschatz Leipzig), 300 samples per language and text type;
-- [papluca/language-identification](https://huggingface.co/datasets/papluca/language-identification),
-  20 languages, 10 000 texts.
+| method | 1 word | 2 words | sentences | time per text |
+|---|---:|---:|---:|---:|
+| `mediapipe` | 66.2% | 78.4% | 94.2% | 23–46 µs |
+| `lingua` | 75.4% | 89.6% | 96.3% | 0.3–2.1 ms |
 
-Lingua's test data comes from the same source as its training data, which favors Lingua.
+To reproduce (see `crates/langer/tests/accuracy.rs`), fetch the test data only and run:
 
-| method | languages | sentences | 2 words | 1 word |
-|---|---|---:|---:|---:|
-| `mediapipe` | 34 common | 95.78% | 84.55% | 69.53% |
-| `lingua` | 34 common | 98.11% | 91.45% | 76.91% |
-| `mediapipe` | all 75 Lingua languages | 89.39% | 73.94% | 62.23% |
-| `lingua` | all 75 Lingua languages | 96.27% | 89.29% | 74.23% |
+```bash
+git clone --depth 1 --filter=blob:none --sparse https://github.com/pemistahl/lingua-rs.git
+```
 
-On papluca both are on par: 98.74% (`mediapipe`) and 98.80% (`lingua`).
+```bash
+git -C lingua-rs sparse-checkout set --no-cone '/language-models/*/testdata/'
+```
 
-The 34 common languages: en, ru, uk, de, fr, es, pt, it, pl, tr, ja, ko, zh, kk, be, nl, sv, cs, fi,
-ar, he, hu, ro, bg, sr, hr, lt, et, vi, id, th, el, da, no.
+```bash
+LANGER_EVAL_DATA=$PWD/lingua-rs/language-models cargo test --release -p langer --test accuracy -- --ignored --nocapture
+```
+
+### Alternatives
+
+Rust detectors compared on the same data, for the 56 languages all of them support (measured
+once, not part of the repository's tests):
+
+| detector | 1 word | 2 words | sentences | time per text |
+|---|---:|---:|---:|---:|
+| `mediapipe` (this repository) | 70.0% | 82.4% | 96.0% | 21–46 µs |
+| [whatlang](https://crates.io/crates/whatlang) 0.18 | 58.0% | 72.4% | 95.3% | 27–46 µs |
+| Lingua, low accuracy mode | 67.7% | 84.1% | 96.1% | 0.25–1.3 ms |
+| Lingua, high accuracy mode (`lingua`) | 77.3% | 91.2% | 98.1% | 0.3–1.9 ms |
+
+whatlang is as fast as `mediapipe` but much less accurate on short texts; Lingua's low accuracy
+mode is as accurate but ten times slower. Other detectors are C++ bindings (CLD2, CLD3,
+fastText) or cover few languages (whichlang, 16).
 
 ### Parity with MediaPipe
 
-`mediapipe` returns the same top language as MediaPipe 1.1.1 on all 97 439 texts tested (the
-datasets above plus edge cases); details in the
-[`langer_mediapipe` README](crates/langer_mediapipe/README.md#parity).
+`mediapipe` returns the same top language as MediaPipe 1.1.1 on all 97 439 texts tested; details
+in the [`langer_mediapipe` README](crates/langer_mediapipe/README.md#parity).
 
 ### Lingua versions
 
@@ -202,15 +224,8 @@ The tests include:
 cargo insta test --review
 ```
 
-Tests that need external data are ignored by default.
-
-Parity with MediaPipe: see the [`langer_mediapipe` README](crates/langer_mediapipe/README.md#parity).
-
-Accuracy of both methods on a labelled dataset (`code<TAB>text` per line):
-
-```bash
-LANGER_EVAL_TSV=eval.tsv cargo test --release -p langer --test accuracy -- --ignored --nocapture
-```
+Tests that need external data are ignored by default: the accuracy report (see
+[Accuracy](#accuracy)).
 
 Inference benchmark:
 
