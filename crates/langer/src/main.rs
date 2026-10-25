@@ -43,8 +43,8 @@ struct Config {
     lingua_max_in_flight: NonZeroUsize,
     /// Seconds between a stop signal and closing the listener, while `GET /health/ready` answers
     /// 503 and requests are still served.
-    #[arg(long, env = "SHUTDOWN_DELAY_SECS", default_value_t = 5)]
-    shutdown_delay_secs: u64,
+    #[arg(long, env = "SHUTDOWN_DELAY_SECONDS", default_value_t = 5)]
+    shutdown_delay_seconds: u64,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -76,7 +76,7 @@ fn main() -> anyhow::Result<()> {
             service,
             limits,
             metrics,
-            Duration::from_secs(config.shutdown_delay_secs),
+            Duration::from_secs(config.shutdown_delay_seconds),
         ))
 }
 
@@ -188,7 +188,7 @@ async fn shut_down(service: Service, delay: Duration, closed: Arc<Notify>) {
     tracing::event!(
         name: "server.shutdown.start",
         Level::INFO,
-        shutdown.delay_secs = delay.as_secs(),
+        shutdown.delay_seconds = delay.as_secs(),
         "server is shutting down",
     );
     tokio::time::sleep(delay).await;

@@ -76,7 +76,7 @@ Both answer `{"status": "ok"}` with `200` when all is well.
 - `/health/ready` (readiness) answers `200` when the service can take requests: it is not shutting
   down, and `mediapipe` detects a fixed English text correctly (about 20 µs). It answers `503`
   with the usual error body otherwise. On a stop signal it turns `503` at once, and the service
-  keeps serving for `SHUTDOWN_DELAY_SECS` before it stops accepting connections, so that traffic
+  keeps serving for `SHUTDOWN_DELAY_SECONDS` before it stops accepting connections, so that traffic
   moves to other instances first. Load does not affect it: excess `lingua` requests get their
   own `503`.
 
@@ -107,7 +107,7 @@ means `lingua` needs more CPU or a higher `LINGUA_MAX_IN_FLIGHT`.
 | `MAX_BODY_BYTES` | `65536` | largest accepted request body; detection time grows with the text, about 0.1 s for 64 KiB with `lingua` |
 | `REQUEST_TIMEOUT_SECONDS` | `10` | longest time to read a request's body and answer it; slower requests get `408` and their connection is closed. After the shutdown delay, connections still open this long are closed |
 | `LINGUA_MAX_IN_FLIGHT` | 4 per CPU core | most `lingua` detections running or queued at once; more get `503` with `Retry-After: 1` |
-| `SHUTDOWN_DELAY_SECS` | `5` | seconds between a stop signal and closing the listener, during which `/health/ready` answers `503` and requests are still served; `0` for local runs |
+| `SHUTDOWN_DELAY_SECONDS` | `5` | seconds between a stop signal and closing the listener, during which `/health/ready` answers `503` and requests are still served; `0` for local runs |
 
 Both models are embedded in the executable; there is nothing else to configure.
 

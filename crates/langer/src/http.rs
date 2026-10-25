@@ -400,7 +400,7 @@ async fn health() -> Json<Health> {
     path = "/health/ready",
     tag = "Health",
     summary = "Check that the service can take requests",
-    description = "Answers `200` when the service is not shutting down and `mediapipe` detects the language of a fixed English text correctly (about 20 µs). Answers `503` once the service starts shutting down, a few seconds before it stops accepting connections (`SHUTDOWN_DELAY_SECS`), so that traffic can move to other instances; requests are still served meanwhile. Load does not affect it: excess `lingua` requests get their own `503`.",
+    description = "Answers `200` when the service is not shutting down and `mediapipe` detects the language of a fixed English text correctly (about 20 µs). Answers `503` once the service starts shutting down, a few seconds before it stops accepting connections (`SHUTDOWN_DELAY_SECONDS`), so that traffic can move to other instances; requests are still served meanwhile. Load does not affect it: excess `lingua` requests get their own `503`.",
     responses(
         (status = 200, description = "The service can take requests", body = Health),
         (status = 503, description = "The service is shutting down or failed its self-check", body = ErrorBody),
