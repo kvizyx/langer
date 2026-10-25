@@ -49,8 +49,9 @@ curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
 - Empty or whitespace-only text: `422 {"status_code":422,"detail":"Text cannot be empty"}`.
 - Body larger than `MAX_BODY_BYTES`: `413`.
 - Body not received within `REQUEST_TIMEOUT_SECONDS`: `408`, and the connection is closed.
-- More `lingua` requests than `LINGUA_MAX_IN_FLIGHT` at once: `503` with `Retry-After` and
-  `Cache-Control: no-store`.
+- More `lingua` requests than `LINGUA_MAX_IN_FLIGHT` at once: the extra ones wait for a free slot,
+  in order of arrival, for up to `LINGUA_QUEUE_TIMEOUT_MILLISECONDS`; those still waiting then get
+  `503` with `Retry-After: 1` and `Cache-Control: no-store`.
 
 Every error, including unknown paths (`404`) and methods (`405`), has the same
 `{"status_code", "detail", "extra"?}` shape.
@@ -90,13 +91,15 @@ Metrics in the Prometheus text format, on the same port:
 | `langer_detection_duration_seconds` | histogram | `method` | time of successful detections |
 | `langer_lingua_slots` | gauge | | `LINGUA_MAX_IN_FLIGHT` |
 | `langer_lingua_slots_in_use` | gauge | | `lingua` detections running or waiting for a thread |
+| `langer_lingua_slot_wait_seconds` | histogram | | time `lingua` detections waited for a slot, of those that got one |
 | `langer_http_requests_total` | counter | `method`, `route`, `status` | requests to known routes |
 | `langer_http_request_duration_seconds` | histogram | `method`, `route` | time to answer them |
 
 `route` is the route's pattern (`/detect`), so that unknown paths and scrapes of `/metrics` add
 no series. Histogram buckets go from 10 µs (`mediapipe`) to 2.5 s (`lingua` on long texts).
-`langer_lingua_slots_in_use` close to `langer_lingua_slots`, or a growing count of `overloaded`,
-means `lingua` needs more CPU or a higher `LINGUA_MAX_IN_FLIGHT`.
+`langer_lingua_slots_in_use` close to `langer_lingua_slots`, slot waits growing towards
+`LINGUA_QUEUE_TIMEOUT_MILLISECONDS`, or a growing count of `overloaded`, mean that `lingua` needs
+more CPU.
 
 ## Configuration
 
@@ -106,7 +109,8 @@ means `lingua` needs more CPU or a higher `LINGUA_MAX_IN_FLIGHT`.
 | `LOG_LEVEL` | `info` | `tracing` log filter (`warn`, `info,langer=debug`, ...); an invalid one stops the start |
 | `MAX_BODY_BYTES` | `65536` | largest accepted request body; detection time grows with the text, about 0.1 s for 64 KiB with `lingua` |
 | `REQUEST_TIMEOUT_SECONDS` | `10` | longest time to read a request's body and answer it; slower requests get `408` and their connection is closed. After the shutdown delay, connections still open this long are closed |
-| `LINGUA_MAX_IN_FLIGHT` | 4 per CPU core | most `lingua` detections running or queued at once; more get `503` with `Retry-After: 1` |
+| `LINGUA_MAX_IN_FLIGHT` | 4 per CPU core | most `lingua` detections running or waiting for a thread at once |
+| `LINGUA_QUEUE_TIMEOUT_MILLISECONDS` | `100` | longest wait for a free `lingua` slot; requests still waiting get `503` with `Retry-After: 1`. `0` refuses them at once |
 | `SHUTDOWN_DELAY_SECONDS` | `5` | seconds between a stop signal and closing the listener, during which `/health/ready` answers `503` and requests are still served; `0` for local runs |
 
 Both models are embedded in the executable; there is nothing else to configure.

@@ -321,7 +321,7 @@ fn error(status: StatusCode, detail: impl Into<String>, extra: Vec<ErrorExtra>) 
         (status = 408, description = "Body not received in time", body = ErrorBody),
         (status = 413, description = "Body larger than the limit", body = ErrorBody),
         (status = 500, description = "Detection failed", body = ErrorBody),
-        (status = 503, description = "Too many `lingua` detections at once; retry later", body = ErrorBody),
+        (status = 503, description = "No `lingua` slot freed up in time; retry later", body = ErrorBody),
     )
 )]
 async fn detect(State(service): State<Service>, body: Result<Bytes, BytesRejection>) -> Response {

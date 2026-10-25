@@ -12,12 +12,14 @@ pub(crate) const DETECTION_DURATION: &str = "langer_detection_duration_seconds";
 pub(crate) const LINGUA_SLOTS: &str = "langer_lingua_slots";
 /// `lingua` detections in flight.
 pub(crate) const LINGUA_SLOTS_IN_USE: &str = "langer_lingua_slots_in_use";
+/// Time `lingua` detections waited for a slot, of those that got one.
+pub(crate) const LINGUA_SLOT_WAIT: &str = "langer_lingua_slot_wait_seconds";
 /// HTTP requests to known routes, by `method`, `route` and `status`.
 pub(crate) const HTTP_REQUESTS: &str = "langer_http_requests_total";
 /// Time to answer HTTP requests to known routes, by `method` and `route`.
 pub(crate) const HTTP_REQUEST_DURATION: &str = "langer_http_request_duration_seconds";
 
-/// Bucket bounds of the duration histograms, in seconds: from `mediapipe`'s tens of
+/// Bucket bounds of the time histograms, in seconds: from `mediapipe`'s tens of
 /// microseconds to `lingua` on long texts.
 const DURATION_BUCKETS: [f64; 17] = [
     0.000_01, 0.000_025, 0.000_05, 0.000_1, 0.000_25, 0.000_5, 0.001, 0.002_5, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25,
@@ -36,7 +38,7 @@ const DURATION_BUCKETS: [f64; 17] = [
 /// Returns an error if a recorder is already installed.
 pub fn install_metrics() -> Result<PrometheusHandle, BuildError> {
     let handle = PrometheusBuilder::new()
-        .set_buckets_for_metric(Matcher::Suffix("_duration_seconds".to_owned()), &DURATION_BUCKETS)?
+        .set_buckets_for_metric(Matcher::Suffix("_seconds".to_owned()), &DURATION_BUCKETS)?
         .install_recorder()?;
 
     describe_counter!(DETECTIONS, "Detection requests, by method and outcome.");
@@ -47,6 +49,11 @@ pub fn install_metrics() -> Result<PrometheusHandle, BuildError> {
     );
     describe_gauge!(LINGUA_SLOTS, "Most lingua detections allowed in flight.");
     describe_gauge!(LINGUA_SLOTS_IN_USE, "Lingua detections in flight.");
+    describe_histogram!(
+        LINGUA_SLOT_WAIT,
+        Unit::Seconds,
+        "Time lingua detections waited for a slot, of those that got one."
+    );
     describe_counter!(
         HTTP_REQUESTS,
         "HTTP requests to known routes, by method, route and status."

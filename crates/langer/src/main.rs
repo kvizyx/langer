@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use axum::serve::ListenerExt;
 use clap::Parser;
-use langer::{Detectors, Limits, Service};
+use langer::{Detectors, Limits, LinguaLimits, Service};
 use langer_mediapipe::Detector;
 use lingua::LanguageDetectorBuilder;
 use metrics_exporter_prometheus::PrometheusHandle;
@@ -38,9 +38,18 @@ struct Config {
     /// Seconds a request may take, from its headers to the response; slower ones get 408.
     #[arg(long, env = "REQUEST_TIMEOUT_SECONDS", default_value_t = langer::DEFAULT_REQUEST_TIMEOUT.as_secs())]
     request_timeout_seconds: u64,
-    /// Most `lingua` detections running or queued at once; more get 503. Defaults to four per core.
+    /// Most `lingua` detections running or waiting for a thread at once; more wait for a free slot.
+    /// Defaults to four per core.
     #[arg(long, env = "LINGUA_MAX_IN_FLIGHT", default_value_t = langer::default_lingua_in_flight())]
     lingua_max_in_flight: NonZeroUsize,
+    /// Milliseconds a `lingua` detection may wait for a free slot before it gets 503; 0 refuses
+    /// at once.
+    #[arg(
+        long,
+        env = "LINGUA_QUEUE_TIMEOUT_MILLISECONDS",
+        default_value_t = langer::DEFAULT_LINGUA_QUEUE_TIMEOUT.as_millis().try_into().unwrap_or(u64::MAX)
+    )]
+    lingua_queue_timeout_milliseconds: u64,
     /// Seconds between a stop signal and closing the listener, while `GET /health/ready` answers
     /// 503 and requests are still served.
     #[arg(long, env = "SHUTDOWN_DELAY_SECONDS", default_value_t = 5)]
@@ -58,7 +67,11 @@ fn main() -> anyhow::Result<()> {
 
     // Before the service, which records its first metrics when it is created.
     let metrics = langer::install_metrics().context("cannot install the metrics recorder")?;
-    let service = Service::new(load_detectors()?, config.lingua_max_in_flight);
+    let lingua = LinguaLimits {
+        in_flight: config.lingua_max_in_flight,
+        queue_timeout: Duration::from_millis(config.lingua_queue_timeout_milliseconds),
+    };
+    let service = Service::new(load_detectors()?, lingua);
     let limits = Limits {
         body: config.max_body_bytes,
         request_timeout: Duration::from_secs(config.request_timeout_seconds),

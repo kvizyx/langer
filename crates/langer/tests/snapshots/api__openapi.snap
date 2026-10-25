@@ -241,7 +241,7 @@ expression: spec
                 }
               }
             },
-            "description": "Too many `lingua` detections at once; retry later"
+            "description": "No `lingua` slot freed up in time; retry later"
           }
         },
         "summary": "Detect the language of a text",

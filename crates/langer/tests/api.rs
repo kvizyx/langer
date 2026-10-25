@@ -4,12 +4,13 @@
 
 use std::num::NonZeroUsize;
 use std::sync::OnceLock;
+use std::time::Duration;
 
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
-use langer::{Detectors, Limits, Service};
+use langer::{Detectors, Limits, LinguaLimits, Service};
 use langer_mediapipe::Detector;
 use lingua::Language::{English, French, Russian};
 use lingua::LanguageDetectorBuilder;
@@ -29,11 +30,17 @@ fn limits(body: usize) -> Limits {
     }
 }
 
+/// A service with `lingua_in_flight` slots that refuses `lingua` requests at once when they are
+/// taken.
 fn service(lingua_in_flight: NonZeroUsize) -> Service {
     let lingua = LanguageDetectorBuilder::from_languages(&[English, French, Russian]).build();
     let detectors = Detectors::new(Detector::new().expect("the bundled model loads"), lingua);
+    let limits = LinguaLimits {
+        in_flight: lingua_in_flight,
+        queue_timeout: Duration::ZERO,
+    };
 
-    Service::new(detectors, lingua_in_flight)
+    Service::new(detectors, limits)
 }
 
 /// The metrics recorder of the test process: there can be only one.

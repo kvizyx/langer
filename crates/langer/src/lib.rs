@@ -37,6 +37,6 @@ pub use detect::{DetectError, Detection, Detectors, Method};
 #[doc(inline)]
 pub use http::{DEFAULT_BODY_LIMIT, DEFAULT_REQUEST_TIMEOUT, Limits, router};
 #[doc(inline)]
-pub use service::{Service, ServiceError, default_lingua_in_flight};
+pub use service::{DEFAULT_LINGUA_QUEUE_TIMEOUT, LinguaLimits, Service, ServiceError, default_lingua_in_flight};
 #[doc(inline)]
 pub use telemetry::install_metrics;
