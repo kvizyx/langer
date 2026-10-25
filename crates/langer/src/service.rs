@@ -110,8 +110,8 @@ impl Service {
         let started = Instant::now();
         let text_len = text.chars().count();
 
-        let detection = match method {
-            Method::MediaPipe => self.inner.detectors.detect(&text, method).map_err(|e| e.to_string()),
+        let detection: Result<Detection, BoxError> = match method {
+            Method::MediaPipe => self.inner.detectors.detect(&text, method).map_err(Into::into),
             Method::Lingua => {
                 let Some(slot) = LinguaSlot::take(&self.inner.lingua_slots, self.inner.lingua_queue_timeout).await
                 else {
@@ -130,24 +130,24 @@ impl Service {
                     service.inner.detectors.detect(&text, method)
                 })
                 .await
-                .map_err(|e| e.to_string())
-                .and_then(|result| result.map_err(|e| e.to_string()))
+                .map_err(Into::into)
+                .and_then(|result| result.map_err(Into::into))
             }
         };
 
         let detection = match detection {
             Ok(detection) => detection,
-            Err(message) => {
+            Err(source) => {
                 tracing::event!(
                     name: "detect.request.failure",
                     tracing::Level::ERROR,
                     detect.method = %method,
-                    error.message = message,
+                    error.message = %source,
                     "language detection failed",
                 );
                 count(method, "failed");
 
-                return Err(ServiceError::with_details(ErrorKind::DetectionFailed, message));
+                return Err(ServiceError::caused_by(ErrorKind::DetectionFailed, source));
             }
         };
 
@@ -254,12 +254,17 @@ impl fmt::Debug for Service {
     }
 }
 
+/// Error of a detector or of the thread it ran on.
+type BoxError = Box<dyn Error + Send + Sync>;
+
 /// Why the service could not answer a request.
 #[derive(Debug)]
 pub struct ServiceError {
     kind: ErrorKind,
-    /// Explanation of the problem, e.g. the self-check result or the detector's error.
+    /// Explanation of the problem, e.g. the self-check result.
     details: Option<String>,
+    /// The error that caused this one, e.g. the detector's.
+    source: Option<BoxError>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -273,13 +278,24 @@ enum ErrorKind {
 
 impl ServiceError {
     fn new(kind: ErrorKind) -> Self {
-        Self { kind, details: None }
+        Self {
+            kind,
+            details: None,
+            source: None,
+        }
     }
 
     fn with_details(kind: ErrorKind, details: String) -> Self {
         Self {
-            kind,
             details: Some(details),
+            ..Self::new(kind)
+        }
+    }
+
+    fn caused_by(kind: ErrorKind, source: BoxError) -> Self {
+        Self {
+            source: Some(source),
+            ..Self::new(kind)
         }
     }
 
@@ -339,7 +355,11 @@ impl fmt::Display for ServiceError {
     }
 }
 
-impl Error for ServiceError {}
+impl Error for ServiceError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.source.as_deref().map(|e| e as _)
+    }
+}
 
 #[cfg(test)]
 mod tests {
