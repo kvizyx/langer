@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::io::{Cursor, Read};
 
-use crate::layers::{HybridDense, KmeansEmbedding, MAX_DENSE_INPUTS, softmax};
-use crate::ngram::NgramHash;
+use crate::layers::{CENTROID, HybridDense, KmeansEmbedding, MAX_DENSE_INPUTS, softmax};
+use crate::ngram::{Head, NgramHash};
 use crate::schema_generated::tflite as fb;
 use crate::{LoadError, PredictError};
 
@@ -242,10 +242,11 @@ impl<'a> Graph<'a> {
                 .ok_or_else(|| LoadError::new("KmeansEmbeddingLookup does not read an NGramHash head"))?;
             let embedding = self.embedding(codes, codebook)?;
 
-            let &(_, vocab) = ngram
+            let vocab = ngram
                 .heads
                 .get(head)
-                .ok_or_else(|| LoadError::new("Unpack does not split the NGramHash heads"))?;
+                .ok_or_else(|| LoadError::new("Unpack does not split the NGramHash heads"))?
+                .vocab;
             if u64::from(vocab) >= embedding.ids() as u64 {
                 return Err(LoadError::new("embedding table is smaller than the hash vocabulary"));
             }
@@ -375,7 +376,7 @@ impl<'a> Graph<'a> {
 
                 let vocab =
                     u32::try_from(vocab).map_err(|e| LoadError::with_source("invalid NGramHash vocabulary size", e))?;
-                Ok((n, vocab))
+                Head::new(n, vocab).ok_or_else(|| LoadError::new("invalid NGramHash vocabulary size"))
             })
             .collect::<Result<_, _>>()?;
 
@@ -398,23 +399,27 @@ impl<'a> Graph<'a> {
         };
 
         let codes: Box<[u8]> = codes_data.into();
-        if ids.checked_mul(codes_per_id) != Some(codes.len()) || codes_per_id == 0 || block == 0 {
+        if ids.checked_mul(codes_per_id) != Some(codes.len()) || codes_per_id == 0 {
             return Err(LoadError::new("embedding code table has the wrong size"));
+        }
+        if block != CENTROID {
+            return Err(LoadError::new(format!(
+                "embedding centroids have {block} values, only {CENTROID} are supported"
+            )));
         }
         if codes.iter().any(|&c| usize::from(c) >= centroids) {
             return Err(LoadError::new("embedding code out of the codebook"));
         }
 
         let codebook_len = centroids
-            .checked_mul(block)
+            .checked_mul(CENTROID)
             .ok_or_else(|| LoadError::new("embedding codebook is too large"))?;
-        let codebook = floats(book_data, codebook_len)?;
+        let codebook = floats(book_data, codebook_len)?.as_chunks::<CENTROID>().0.into();
 
         Ok(KmeansEmbedding {
             codes,
             codes_per_id,
             codebook,
-            block,
         })
     }
 

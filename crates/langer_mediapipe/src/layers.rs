@@ -3,23 +3,25 @@
 
 use crate::PredictError;
 
+/// Values in a centroid of a [`KmeansEmbedding`], as in MediaPipe's model. Fixed, so that adding
+/// a centroid compiles to a few SIMD instructions.
+pub(crate) const CENTROID: usize = 4;
+
 /// `KmeansEmbeddingLookup`: averages the embeddings of the ids in a row.
 ///
-/// An embedding is split into `codes_per_id` blocks; each block is a codebook vector
-/// selected by one byte of the id's code.
+/// An embedding is split into `codes_per_id` blocks of [`CENTROID`] values; each block is a
+/// centroid of the codebook, selected by one byte of the id's code.
 #[derive(Debug)]
 pub(crate) struct KmeansEmbedding {
-    /// `codes[id * codes_per_id + j]` is the codebook index of block `j` of `id`.
+    /// `codes[id * codes_per_id + j]` is the centroid of block `j` of `id`.
     pub(crate) codes: Box<[u8]>,
     pub(crate) codes_per_id: usize,
-    /// `codebook[index * block + k]`.
-    pub(crate) codebook: Box<[f32]>,
-    pub(crate) block: usize,
+    pub(crate) codebook: Box<[[f32; CENTROID]]>,
 }
 
 impl KmeansEmbedding {
     pub(crate) fn width(&self) -> usize {
-        self.codes_per_id * self.block
+        self.codes_per_id * CENTROID
     }
 
     pub(crate) fn ids(&self) -> usize {
@@ -32,21 +34,22 @@ impl KmeansEmbedding {
 
     /// Appends the mean embedding of `ids` to `out`. Id 0 ends the row, as padding.
     pub(crate) fn lookup_into(&self, ids: &[u32], out: &mut Vec<f32>) -> Result<(), PredictError> {
-        let mut sum = vec![0.0; self.width()];
+        // The sum is built in place, at the end of `out`: `start..` is always in range.
+        let start = out.len();
+        out.resize(start + self.width(), 0.0);
+        let sum = out.get_mut(start..).unwrap_or_default();
+        let (blocks, _) = sum.as_chunks_mut::<CENTROID>();
+
         let mut count = 0_usize;
         for &id in ids.iter().take_while(|&&id| id != 0) {
             count += 1;
-            let codes = self
-                .codes
-                .chunks_exact(self.codes_per_id)
-                .nth(id as usize)
+            let codes = codes_of(&self.codes, id as usize, self.codes_per_id)
                 .ok_or_else(|| PredictError::new("n-gram id outside the embedding table"))?;
 
-            for (block, &code) in sum.chunks_exact_mut(self.block).zip(codes) {
+            for (block, &code) in blocks.iter_mut().zip(codes) {
                 let centroid = self
                     .codebook
-                    .chunks_exact(self.block)
-                    .nth(usize::from(code))
+                    .get(usize::from(code))
                     .ok_or_else(|| PredictError::new("embedding code outside the codebook"))?;
 
                 for (s, c) in block.iter_mut().zip(centroid) {
@@ -60,10 +63,18 @@ impl KmeansEmbedding {
             reason = "the id count is bounded by max_splits, far below 2^24"
         )]
         let count = count.max(1) as f32;
-        out.extend(sum.iter().map(|s| s / count));
+        for s in sum {
+            *s /= count;
+        }
 
         Ok(())
     }
+}
+
+/// The `len` codes of `id`, if it is in the table.
+fn codes_of(codes: &[u8], id: usize, len: usize) -> Option<&[u8]> {
+    let start = id.checked_mul(len)?;
+    codes.get(start..start.checked_add(len)?)
 }
 
 /// Most inputs of a [`HybridDense`] layer whose `i32` accumulator cannot overflow.
@@ -260,13 +271,12 @@ mod tests {
             // Ids 0..=2, two blocks each.
             codes: Box::new([0, 0, 0, 1, 1, 0]),
             codes_per_id: 2,
-            codebook: Box::new([1.0, 2.0, 10.0, 20.0]),
-            block: 2,
+            codebook: Box::new([[1.0, 2.0, 3.0, 4.0], [10.0, 20.0, 30.0, 40.0]]),
         };
         let mut out = vec![7.0];
         embedding.lookup_into(&[1, 2, 0, 1], &mut out).unwrap();
-        // Id 1 -> [1, 2, 10, 20], id 2 -> [10, 20, 1, 2]; the 0 stops the row.
-        assert_eq!(out, [7.0, 5.5, 11.0, 5.5, 11.0]);
+        // Id 1 -> centroids 0 and 1, id 2 -> centroids 1 and 0; the 0 stops the row.
+        assert_eq!(out, [7.0, 5.5, 11.0, 16.5, 22.0, 5.5, 11.0, 16.5, 22.0]);
     }
 
     proptest! {

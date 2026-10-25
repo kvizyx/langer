@@ -11,6 +11,7 @@ publish.workspace = true
 [dependencies]
 flatbuffers = { workspace = true, features = ["std"] }
 flexbuffers.workspace = true
+strength_reduce.workspace = true
 zip.workspace = true
 
 [build-dependencies]

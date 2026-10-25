@@ -1,5 +1,7 @@
 //! The `NGramHash` op: character n-grams of a text, hashed into vocabulary buckets.
 
+use strength_reduce::StrengthReducedU64;
+
 use crate::PredictError;
 use crate::murmur;
 use crate::unicode::{self, Decoded};
@@ -15,14 +17,36 @@ const SEPARATOR: u8 = b' ';
 const CHARS_PER_TOKEN: usize = 2;
 
 /// Parameters of an `NGramHash` op, read from its custom options.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub(crate) struct NgramHash {
     pub(crate) seed: u64,
-    /// N-gram length (in characters) and vocabulary size of every output row.
-    pub(crate) heads: Box<[(usize, u32)]>,
+    /// One per output row.
+    pub(crate) heads: Box<[Head]>,
     /// Maximum number of tokens, including the prefix and suffix markers.
     pub(crate) max_splits: usize,
     pub(crate) lowercase: bool,
+}
+
+/// The n-grams of one output row of [`NgramHash`].
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Head {
+    /// N-gram length, in tokens.
+    pub(crate) n: usize,
+    /// Number of buckets the n-grams are hashed into.
+    pub(crate) vocab: u32,
+    /// `vocab` as a divisor that takes a multiplication instead of a division.
+    buckets: StrengthReducedU64,
+}
+
+impl Head {
+    /// A head of `n`-grams hashed into `vocab` buckets, if `vocab` is not zero.
+    pub(crate) fn new(n: usize, vocab: u32) -> Option<Self> {
+        (vocab > 0).then(|| Self {
+            n,
+            vocab,
+            buckets: StrengthReducedU64::new(u64::from(vocab)),
+        })
+    }
 }
 
 impl NgramHash {
@@ -55,14 +79,14 @@ impl NgramHash {
 
         self.heads
             .iter()
-            .map(|&(n, vocab)| {
+            .map(|head| {
                 (0..tokens.len())
                     .map(|start| {
                         let bytes = tokens
-                            .span(start, (start + n).min(tokens.len()))
+                            .span(start, (start + head.n).min(tokens.len()))
                             .ok_or_else(|| PredictError::new("n-gram outside the tokens"))?;
 
-                        let bucket = murmur::hash64(bytes, self.seed) % u64::from(vocab);
+                        let bucket = murmur::hash64(bytes, self.seed) % head.buckets;
                         #[expect(
                             clippy::cast_possible_truncation,
                             reason = "the remainder is smaller than the vocabulary size, a u32"
@@ -166,7 +190,7 @@ mod tests {
     fn op() -> NgramHash {
         NgramHash {
             seed: 10_911,
-            heads: Box::new([(1, 50), (3, 7)]),
+            heads: [Head::new(1, 50), Head::new(3, 7)].into_iter().flatten().collect(),
             max_splits: 128,
             lowercase: true,
         }
@@ -261,7 +285,7 @@ mod tests {
         let max_tokens = text.len().min(126) + 2;
         prop_assert_eq!(rows.len(), 2);
         prop_assert_eq!(rows[0].len(), rows[1].len());
-        for (row, &(_, vocab)) in rows.iter().zip(op().heads.iter()) {
+        for (row, &Head { vocab, .. }) in rows.iter().zip(op().heads.iter()) {
             prop_assert!((2..=max_tokens).contains(&row.len()));
             prop_assert!(row.iter().all(|&id| (1..=vocab).contains(&id)));
         }

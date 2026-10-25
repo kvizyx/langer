@@ -3,6 +3,8 @@
 //! The tables predate current Unicode, so `char::is_alphabetic` and `char::to_lowercase`
 //! disagree with them on some code points; n-gram hashes need the exact original behavior.
 
+use std::sync::LazyLock;
+
 use tables::{ALPHA_RANGES, ALPHA_SINGLES, LOWER_PAIRS, LOWER_RANGES, LOWER_SINGLES};
 
 mod tables {
@@ -16,14 +18,37 @@ const REPLACEMENT: u32 = 0xFFFD;
 /// Largest code point (`Runemax`).
 const MAX: u32 = 0x10_FFFF;
 
+/// Code points below this are looked up in [`SMALL`] rather than searched for in the tables:
+/// Latin, Greek, Cyrillic, Armenian, Hebrew, Arabic and more, the two-byte UTF-8 range.
+const SMALL_END: u32 = 0x800;
+
+/// `(is_alpha, to_lower)` of every code point below [`SMALL_END`], from the tables.
+static SMALL: LazyLock<Box<[(bool, u32)]>> = LazyLock::new(|| {
+    (0..SMALL_END)
+        .map(|c| (is_alpha_in_tables(c), to_lower_in_tables(c)))
+        .collect()
+});
+
 /// `utf_isalpharune`.
 pub(crate) fn is_alpha(c: u32) -> bool {
-    let in_range = last_starting_at_or_before(ALPHA_RANGES, c, |r| r.0).is_some_and(|&(_, end)| c <= end);
-    in_range || ALPHA_SINGLES.binary_search(&c).is_ok()
+    small(c).map_or_else(|| is_alpha_in_tables(c), |&(alpha, _)| alpha)
 }
 
 /// `utf_tolowerrune`.
 pub(crate) fn to_lower(c: u32) -> u32 {
+    small(c).map_or_else(|| to_lower_in_tables(c), |&(_, lower)| lower)
+}
+
+fn small(c: u32) -> Option<&'static (bool, u32)> {
+    SMALL.get(usize::try_from(c).ok()?)
+}
+
+fn is_alpha_in_tables(c: u32) -> bool {
+    let in_range = last_starting_at_or_before(ALPHA_RANGES, c, |r| r.0).is_some_and(|&(_, end)| c <= end);
+    in_range || ALPHA_SINGLES.binary_search(&c).is_ok()
+}
+
+fn to_lower_in_tables(c: u32) -> u32 {
     let shift = |delta: i32| c.checked_add_signed(delta).unwrap_or(c);
 
     if let Some(&(start, end, delta)) = last_starting_at_or_before(LOWER_RANGES, c, |r| r.0)
@@ -140,6 +165,14 @@ mod tests {
     #[case::hangul('한')]
     fn is_alpha_accepts_letters_of_any_script(#[case] c: char) {
         assert!(is_alpha(u32::from(c)));
+    }
+
+    #[test]
+    fn small_code_points_agree_with_the_tables() {
+        for c in 0..=SMALL_END {
+            assert_eq!(is_alpha(c), is_alpha_in_tables(c), "is_alpha({c:#x})");
+            assert_eq!(to_lower(c), to_lower_in_tables(c), "to_lower({c:#x})");
+        }
     }
 
     #[rstest]
