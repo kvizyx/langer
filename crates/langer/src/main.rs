@@ -36,8 +36,8 @@ struct Config {
     #[arg(long, env = "MAX_BODY_BYTES", default_value_t = langer::DEFAULT_BODY_LIMIT)]
     max_body_bytes: NonZeroUsize,
     /// Seconds a request may take, from its headers to the response; slower ones get 408.
-    #[arg(long, env = "REQUEST_TIMEOUT_SECS", default_value_t = langer::DEFAULT_REQUEST_TIMEOUT.as_secs())]
-    request_timeout_secs: u64,
+    #[arg(long, env = "REQUEST_TIMEOUT_SECONDS", default_value_t = langer::DEFAULT_REQUEST_TIMEOUT.as_secs())]
+    request_timeout_seconds: u64,
     /// Most `lingua` detections running or queued at once; more get 503. Defaults to four per core.
     #[arg(long, env = "LINGUA_MAX_IN_FLIGHT", default_value_t = langer::default_lingua_in_flight())]
     lingua_max_in_flight: NonZeroUsize,
@@ -61,7 +61,7 @@ fn main() -> anyhow::Result<()> {
     let service = Service::new(load_detectors()?, config.lingua_max_in_flight);
     let limits = Limits {
         body: config.max_body_bytes,
-        request_timeout: Duration::from_secs(config.request_timeout_secs),
+        request_timeout: Duration::from_secs(config.request_timeout_seconds),
     };
 
     // Lingua runs on blocking threads; more of them than cores only adds memory and

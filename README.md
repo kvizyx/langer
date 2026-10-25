@@ -48,7 +48,7 @@ curl -sL <url> | openssl dgst -sha384 -binary | openssl base64 -A
   fields: `422` with `"detail": "Body validation failed"`. Both give the reason in `extra`.
 - Empty or whitespace-only text: `422 {"status_code":422,"detail":"Text cannot be empty"}`.
 - Body larger than `MAX_BODY_BYTES`: `413`.
-- Body not received within `REQUEST_TIMEOUT_SECS`: `408`, and the connection is closed.
+- Body not received within `REQUEST_TIMEOUT_SECONDS`: `408`, and the connection is closed.
 - More `lingua` requests than `LINGUA_MAX_IN_FLIGHT` at once: `503` with `Retry-After` and
   `Cache-Control: no-store`.
 
@@ -88,8 +88,7 @@ Metrics in the Prometheus text format, on the same port:
 |---|---|---|---|
 | `langer_detections_total` | counter | `method`, `outcome` | detection requests; `outcome` is `ok`, `invalid_input`, `overloaded` or `failed` |
 | `langer_detection_duration_seconds` | histogram | `method` | time of successful detections |
-| `langer_lingua_slots` | gauge | | `REQUEST_TIMEOUT_SECS` | `10` | longest time to read a request's body and answer it; slower requests get `408` and their connection is closed. After the shutdown delay, connections still open this long are closed |
-| `LINGUA_MAX_IN_FLIGHT` |
+| `langer_lingua_slots` | gauge | | `LINGUA_MAX_IN_FLIGHT` |
 | `langer_lingua_slots_in_use` | gauge | | `lingua` detections running or waiting for a thread |
 | `langer_http_requests_total` | counter | `method`, `route`, `status` | requests to known routes |
 | `langer_http_request_duration_seconds` | histogram | `method`, `route` | time to answer them |
@@ -106,7 +105,7 @@ means `lingua` needs more CPU or a higher `LINGUA_MAX_IN_FLIGHT`.
 | `PORT` | `3000` | HTTP port |
 | `LOG_LEVEL` | `info` | `tracing` log filter (`warn`, `info,langer=debug`, ...); an invalid one stops the start |
 | `MAX_BODY_BYTES` | `65536` | largest accepted request body; detection time grows with the text, about 0.1 s for 64 KiB with `lingua` |
-| `REQUEST_TIMEOUT_SECS` | `10` | longest time to read a request's body and answer it; slower requests get `408` and their connection is closed. After the shutdown delay, connections still open this long are closed |
+| `REQUEST_TIMEOUT_SECONDS` | `10` | longest time to read a request's body and answer it; slower requests get `408` and their connection is closed. After the shutdown delay, connections still open this long are closed |
 | `LINGUA_MAX_IN_FLIGHT` | 4 per CPU core | most `lingua` detections running or queued at once; more get `503` with `Retry-After: 1` |
 | `SHUTDOWN_DELAY_SECS` | `5` | seconds between a stop signal and closing the listener, during which `/health/ready` answers `503` and requests are still served; `0` for local runs |
 
