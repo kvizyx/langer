@@ -635,6 +635,7 @@ dependencies = [
  "anyhow",
  "axum",
  "clap",
+ "divan",
  "http-body-util",
  "insta",
  "langer_mediapipe",

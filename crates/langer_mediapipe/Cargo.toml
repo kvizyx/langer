@@ -21,6 +21,10 @@ divan.workspace = true
 proptest.workspace = true
 rstest.workspace = true
 
+# Unit tests only; benches have their own target.
+[lib]
+bench = false
+
 [[bench]]
 name = "predict"
 harness = false

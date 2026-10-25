@@ -32,11 +32,24 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 
 [dev-dependencies]
+divan.workspace = true
 http-body-util.workspace = true
 insta.workspace = true
 proptest.workspace = true
 rstest.workspace = true
 tower = { workspace = true, features = ["util"] }
+
+# Unit tests only; benches have their own target.
+[lib]
+bench = false
+
+[[bin]]
+name = "langer"
+bench = false
+
+[[bench]]
+name = "detect"
+harness = false
 
 [lints]
 workspace = true
