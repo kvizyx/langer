@@ -632,7 +632,7 @@ dependencies = [
 
 [[package]]
 name = "langer"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "axum",
@@ -660,7 +660,7 @@ dependencies = [
 
 [[package]]
 name = "langer-mediapipe"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "anyhow",
  "divan",

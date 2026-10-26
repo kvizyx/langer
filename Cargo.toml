@@ -3,14 +3,14 @@ members = ["crates/*"]
 resolver = "3"
 
 [workspace.package]
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
 publish = false
 
 [workspace.dependencies]
-langer-mediapipe = { path = "crates/langer-mediapipe", version = "0.1.0" }
+langer-mediapipe = { path = "crates/langer-mediapipe", version = "1.0.0" }
 
 anyhow = { version = "1.0.104", default-features = false, features = ["std"] }
 axum = { version = "0.8.9", default-features = false }
