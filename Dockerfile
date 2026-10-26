@@ -13,12 +13,21 @@ FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM chef AS builder
-# CPU level the executable requires: x86-64-v2 (SSE4.2, POPCNT) runs on every x86 CPU since
-# 2009-2011; x86-64-v3 (AVX2, FMA) is 25-40% faster but dies with SIGILL where AVX2 is missing.
-# Dependencies and the service must be built with the same flags, so it is set before cook.
+# CPU level the executable requires, by architecture; TARGET_CPU overrides it. Dependencies and
+# the service must be built with the same flags, so they are set before cook.
+#
+# x86-64-v2 (SSE4.2, POPCNT) runs on every x86 CPU since 2009-2011; x86-64-v3 (AVX2, FMA) is
+# 25-40% faster but dies with SIGILL where AVX2 is missing.
+FROM chef AS cpu-amd64
 ARG TARGET_CPU=x86-64-v2
 ENV RUSTFLAGS="-C target-cpu=${TARGET_CPU}"
+
+# Every 64-bit Arm CPU has NEON and FMA, so the baseline is enough.
+FROM chef AS cpu-arm64
+ARG TARGET_CPU=generic
+ENV RUSTFLAGS="-C target-cpu=${TARGET_CPU}"
+
+FROM cpu-${TARGETARCH} AS builder
 COPY --from=planner /src/recipe.json recipe.json
 RUN cargo chef cook --release --locked -p langer --recipe-path recipe.json
 COPY . .

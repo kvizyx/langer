@@ -42,11 +42,13 @@ jobs:
         with:
           command: check
 
+  # Every variant and architecture is built natively on its own runner (Rust under emulation
+  # would take ages) and pushed by digest; `manifest` then tags them as one multi-arch image.
   image:
-    name: Image (${{ matrix.target_cpu }})
+    name: Image (${{ matrix.variant }}, ${{ matrix.arch }})
     needs: check
     if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
@@ -54,12 +56,74 @@ jobs:
       matrix:
         include:
           # Runs on any x86-64 server CPU since ~2009.
-          - target_cpu: x86-64-v2
-            suffix: ""
+          - variant: default
+            arch: amd64
+            runner: ubuntu-latest
+            target_cpu: x86-64-v2
+          # Runs on any 64-bit Arm server CPU (AWS Graviton, Ampere, ...).
+          - variant: default
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            target_cpu: generic
           # AVX2 and FMA (Intel Haswell, AMD Excavator and newer).
-          - target_cpu: x86-64-v3
+          - variant: avx2
+            arch: amd64
+            runner: ubuntu-latest
+            target_cpu: x86-64-v3
+    steps:
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+      - id: build
+        uses: docker/build-push-action@v7
+        with:
+          platforms: linux/${{ matrix.arch }}
+          build-args: TARGET_CPU=${{ matrix.target_cpu }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          # One cache per build: their layers differ from the dependencies up.
+          cache-from: type=gha,scope=${{ matrix.variant }}-${{ matrix.arch }}
+          cache-to: type=gha,scope=${{ matrix.variant }}-${{ matrix.arch }},mode=max
+      - name: Export the digest
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: digests-${{ matrix.variant }}-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  manifest:
+    name: Manifest (${{ matrix.variant }})
+    needs: image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - variant: default
+            suffix: ""
+          - variant: avx2
             suffix: -avx2
     steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-${{ matrix.variant }}-*
+          merge-multiple: true
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
         with:
@@ -78,13 +142,13 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=sha
-      - uses: docker/build-push-action@v7
-        with:
-          platforms: linux/amd64
-          build-args: TARGET_CPU=${{ matrix.target_cpu }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          push: true
-          # One cache per variant: their layers differ from the dependencies up.
-          cache-from: type=gha,scope=${{ matrix.target_cpu }}
-          cache-to: type=gha,scope=${{ matrix.target_cpu }},mode=max
+      - name: Tag the images of every architecture as one
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          mapfile -t tags < <(jq -r '.tags[] | "--tag=" + .' <<< "$DOCKER_METADATA_OUTPUT_JSON")
+          images=()
+          for digest in *; do
+            images+=("$IMAGE@sha256:$digest")
+          done
+
+          docker buildx imagetools create "${tags[@]}" "${images[@]}"
