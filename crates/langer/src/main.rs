@@ -163,9 +163,15 @@ async fn serve(
         }
     });
 
+    let stopping = Arc::new(Notify::new());
     let closed = Arc::new(Notify::new());
     let server = axum::serve(listener, langer::router(service.clone(), limits, metrics))
-        .with_graceful_shutdown(shut_down(service, shutdown_delay, Arc::clone(&closed)))
+        .with_graceful_shutdown(shut_down(
+            service,
+            shutdown_delay,
+            Arc::clone(&stopping),
+            Arc::clone(&closed),
+        ))
         .into_future();
 
     // Requests in flight end within the request timeout, but a connection that never sends a
@@ -173,6 +179,12 @@ async fn serve(
     let drained = async {
         closed.notified().await;
         tokio::time::sleep(limits.request_timeout).await;
+    };
+
+    // A second stop signal, e.g. Ctrl+C pressed again, skips the delay and the connections.
+    let forced = async {
+        stopping.notified().await;
+        shutdown_signal().await;
     };
 
     tokio::select! {
@@ -184,6 +196,13 @@ async fn serve(
                 "connections still open after the request timeout, closing them",
             );
         }
+        () = forced => {
+            tracing::event!(
+                name: "server.shutdown.forced",
+                Level::WARN,
+                "second stop signal, closing the connections at once",
+            );
+        }
     }
 
     tracing::event!(name: "server.shutdown.success", Level::INFO, "server is stopped");
@@ -193,9 +212,10 @@ async fn serve(
 
 /// Resolves when the server should stop accepting connections: a stop signal, then
 /// `delay` of reporting not ready while still serving, so that clients move to other instances.
-/// Notifies `closed` when it resolves.
-async fn shut_down(service: Service, delay: Duration, closed: Arc<Notify>) {
+/// Notifies `stopping` on the signal and `closed` when it resolves.
+async fn shut_down(service: Service, delay: Duration, stopping: Arc<Notify>, closed: Arc<Notify>) {
     shutdown_signal().await;
+    stopping.notify_one();
 
     service.shut_down();
     tracing::event!(
