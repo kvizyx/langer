@@ -19,13 +19,6 @@ pub(crate) const HTTP_REQUESTS: &str = "langer_http_requests_total";
 /// Time to answer HTTP requests to known routes, by `method` and `route`.
 pub(crate) const HTTP_REQUEST_DURATION: &str = "langer_http_request_duration_seconds";
 
-/// Bucket bounds of the time histograms, in seconds: from `mediapipe`'s tens of
-/// microseconds to `lingua` on long texts.
-const DURATION_BUCKETS: [f64; 17] = [
-    0.000_01, 0.000_025, 0.000_05, 0.000_1, 0.000_25, 0.000_5, 0.001, 0.002_5, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25,
-    0.5, 1.0, 2.5,
-];
-
 /// Installs the Prometheus recorder for the whole process and returns the handle that renders
 /// the metrics.
 ///
@@ -38,7 +31,7 @@ const DURATION_BUCKETS: [f64; 17] = [
 /// Returns an error if a recorder is already installed.
 pub fn install_metrics() -> Result<PrometheusHandle, BuildError> {
     let handle = PrometheusBuilder::new()
-        .set_buckets_for_metric(Matcher::Suffix("_seconds".to_owned()), &DURATION_BUCKETS)?
+        .set_buckets_for_metric(Matcher::Suffix("_seconds".to_owned()), &duration_buckets())?
         .install_recorder()?;
 
     describe_counter!(DETECTIONS, "Detection requests, by method and outcome.");
@@ -65,4 +58,37 @@ pub fn install_metrics() -> Result<PrometheusHandle, BuildError> {
     );
 
     Ok(handle)
+}
+
+/// Bucket bounds of the time histograms, in seconds: 1, 2.5 and 5 of every decade from
+/// `mediapipe`'s tens of microseconds to `lingua` on long texts.
+fn duration_buckets() -> [f64; 17] {
+    #[rustfmt::skip]
+    const BUCKETS: [u32; 17] = [
+        10, 25, 50,
+        100, 250, 500,
+        1_000, 2_500, 5_000,
+        10_000, 25_000, 50_000,
+        100_000, 250_000, 500_000,
+        1_000_000, 2_500_000,
+    ];
+
+    // One division by a power of ten rounds once.
+    BUCKETS.map(|micros| f64::from(micros) / 1e6)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::duration_buckets;
+
+    #[test]
+    fn duration_buckets_are_the_decimal_bounds() {
+        let expected = [
+            0.000_01, 0.000_025, 0.000_05, 0.000_1, 0.000_25, 0.000_5, 0.001, 0.002_5, 0.005, 0.01, 0.025, 0.05, 0.1,
+            0.25, 0.5, 1.0, 2.5,
+        ];
+
+        // Bit for bit: they are the `le` labels of the histograms.
+        assert_eq!(duration_buckets().map(f64::to_bits), expected.map(f64::to_bits));
+    }
 }

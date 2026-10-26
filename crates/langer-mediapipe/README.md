@@ -75,12 +75,15 @@ Follow this steps if you need to update vendor:
    flatc --rust -o src vendor/tflite/schema.fbs
    ```
 
-4. Run the tests. A change to the model or the character tables must be checked against
-   MediaPipe itself.
+4. Run the tests. `tests/parity.rs` compares the predictions with MediaPipe's own for about 2000
+   texts in every language of the model.
 
    ```bash
    cargo test -p langer-mediapipe
    ```
+
+5. After a change to the model, regenerate MediaPipe's predictions as
+   [`tests/data/README.md`](tests/data/README.md) describes, and run the tests again.
 
 ### Checking
 

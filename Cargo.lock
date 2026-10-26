@@ -666,6 +666,8 @@ dependencies = [
  "flexbuffers",
  "proptest",
  "rstest",
+ "serde",
+ "serde_json",
  "strength_reduce",
  "zip",
 ]

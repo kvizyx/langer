@@ -4,3 +4,4 @@
 crates/langer-mediapipe/vendor/** -text linguist-vendored
 crates/langer-mediapipe/vendor/**/*.tflite binary
 crates/langer-mediapipe/src/schema_generated.rs linguist-generated
+crates/langer-mediapipe/tests/data/parity.jsonl linguist-generated

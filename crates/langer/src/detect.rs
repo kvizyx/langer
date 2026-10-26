@@ -153,6 +153,7 @@ pub(crate) fn tag(code: &str) -> &str {
         "fil" => "tl",
         "nb" | "nn" => "no",
         "unknown" => UNDETERMINED,
+        // The rest of the codes are the same.
         code => code,
     }
 }

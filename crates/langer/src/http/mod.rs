@@ -104,27 +104,27 @@ pub fn router(service: Service, limits: Limits, metrics: PrometheusHandle) -> Ro
         .route("/docs", get(redirect_to_docs))
         // Only matched routes, so that unknown paths cannot add metric series; `/metrics` comes
         // after, so that scrapes are not counted.
-        .route_layer(middleware::from_fn(track_metrics))
+        .route_layer(middleware::from_fn(with_metrics))
         .merge(metrics)
         .fallback(not_found)
         .method_not_allowed_fallback(method_not_allowed);
 
-    with_middleware(app, limits)
+    set_middleware(app, limits)
 }
 
-/// Adds the layers every response goes through. The last one added runs first, so CORS wraps
+/// Sets the layers every response goes through. The last one added runs first, so CORS wraps
 /// everything: its headers are set on every response, including the `500` of a panic and the
 /// `408` of a timeout.
-fn with_middleware(app: Router, limits: Limits) -> Router {
+fn set_middleware(app: Router, limits: Limits) -> Router {
     app.layer(DefaultBodyLimit::max(limits.body.get()))
-        .layer(middleware::from_fn_with_state(limits.request_timeout, time_out))
+        .layer(middleware::from_fn_with_state(limits.request_timeout, with_timeout))
         .layer(CatchPanicLayer::custom(panic_response))
         .layer(CorsLayer::permissive())
 }
 
 /// Answers `408` and closes the connection when a request takes longer than `timeout`, e.g.
 /// because its client stalls sending the body.
-async fn time_out(State(timeout): State<Duration>, request: Request, next: Next) -> Response {
+async fn with_timeout(State(timeout): State<Duration>, request: Request, next: Next) -> Response {
     tokio::time::timeout(timeout, next.run(request))
         .await
         .unwrap_or_else(|_| {
@@ -132,6 +132,25 @@ async fn time_out(State(timeout): State<Duration>, request: Request, next: Next)
                 .closing()
                 .into_response()
         })
+}
+
+/// Counts and times a request to a known route, labelled with the route's pattern.
+async fn with_metrics(request: Request, next: Next) -> Response {
+    let started = Instant::now();
+    let route = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map_or_else(String::new, |path| path.as_str().to_owned());
+    // Only the methods the routes accept reach this layer, so the label has few values.
+    let method = request.method().to_string();
+
+    let response = next.run(request).await;
+
+    let status = response.status().as_u16().to_string();
+    counter!(HTTP_REQUESTS, "method" => method.clone(), "route" => route.clone(), "status" => status).increment(1);
+    histogram!(HTTP_REQUEST_DURATION, "method" => method, "route" => route).record(started.elapsed().as_secs_f64());
+
+    response
 }
 
 /// Answers a request whose handler panicked. Handlers return errors instead of panicking; this
@@ -155,25 +174,6 @@ fn panic_response(panic: Box<dyn Any + Send + 'static>) -> Response {
     );
 
     ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, "Internal server error").into_response()
-}
-
-/// Counts and times a request to a known route, labelled with the route's pattern.
-async fn track_metrics(request: Request, next: Next) -> Response {
-    let started = Instant::now();
-    let route = request
-        .extensions()
-        .get::<MatchedPath>()
-        .map_or_else(String::new, |path| path.as_str().to_owned());
-    // Only the methods the routes accept reach this layer, so the label has few values.
-    let method = request.method().to_string();
-
-    let response = next.run(request).await;
-
-    let status = response.status().as_u16().to_string();
-    counter!(HTTP_REQUESTS, "method" => method.clone(), "route" => route.clone(), "status" => status).increment(1);
-    histogram!(HTTP_REQUEST_DURATION, "method" => method, "route" => route).record(started.elapsed().as_secs_f64());
-
-    response
 }
 
 /// Metrics in the Prometheus text format.
@@ -358,7 +358,7 @@ mod tests {
 
     #[tokio::test]
     async fn panicking_handler_returns_500_with_cors_headers() {
-        let app = with_middleware(Router::new().route("/panic", get(boom)), Limits::default());
+        let app = set_middleware(Router::new().route("/panic", get(boom)), Limits::default());
 
         let request = Request::get("/panic")
             .header(header::ORIGIN, "https://example.com")
@@ -379,7 +379,7 @@ mod tests {
             request_timeout: Duration::from_millis(10),
             ..Limits::default()
         };
-        let app = with_middleware(Router::new().route("/stall", get(stall)), limits);
+        let app = set_middleware(Router::new().route("/stall", get(stall)), limits);
 
         let request = Request::get("/stall")
             .header(header::ORIGIN, "https://example.com")

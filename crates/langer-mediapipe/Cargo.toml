@@ -21,6 +21,8 @@ anyhow.workspace = true
 divan.workspace = true
 proptest.workspace = true
 rstest.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 
 # Unit tests only; benches have their own target.
 [lib]
