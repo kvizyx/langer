@@ -45,12 +45,12 @@ const SCALAR_TEMPLATE: &str = include_str!("../../assets/scalar.html");
 #[derive(OpenApi)]
 #[openapi(
     info(
-        title = "Langer API",
-        description = "Self-hosted language detection HTTP service, based on Lingua and MediaPipe."
+        title = "Langer",
+        description = "Self-hosted language detection server, based on Lingua and MediaPipe."
     ),
     tags(
-        (name = "Detect", description = "Language detection and supported languages"),
-        (name = "Health", description = "Whether the service is running and able to serve detections"),
+        (name = "Detection", description = "Language detection and list of supported languages"),
+        (name = "Health", description = "Whether the server is running and able to serve detections"),
     )
 )]
 struct ApiDoc;
@@ -208,7 +208,7 @@ impl Docs {
         };
 
         let page = Scalar::new(openapi)
-            .title("Langer API")
+            .title("Langer")
             .custom_html(SCALAR_TEMPLATE)
             .to_html();
 
@@ -264,18 +264,15 @@ struct DetectRequest {
 #[utoipa::path(
     post,
     path = "/detect",
-    tag = "Detect",
+    tag = "Detection",
     summary = "Detect the language of a text",
-    description = "`mediapipe` (default) answers in tens of microseconds, `lingua` is more accurate on one or two words but takes about a millisecond.",
+    description = "Returns the most probable language of `text` as a BCP 47 tag with its confidence. A text without letters, or one the method cannot decide on, gets `und` and a `null` confidence.",
     request_body = DetectRequest,
     responses(
-        (status = 200, description = "Detected language", body = Detection),
-        (status = 400, description = "Body is not valid JSON", body = ErrorBody),
-        (status = 422, description = "Valid JSON with invalid fields, or empty text", body = ErrorBody),
-        (status = 408, description = "Body not received in time", body = ErrorBody),
-        (status = 413, description = "Body larger than the limit", body = ErrorBody),
-        (status = 500, description = "Detection failed", body = ErrorBody),
-        (status = 503, description = "No `lingua` slot freed up in time; retry later", body = ErrorBody),
+        (status = 200, description = "Language is detected", body = Detection),
+        (status = 400, description = "Body is not valid", body = ErrorBody),
+        (status = 422, description = "Invalid fields or empty text", body = ErrorBody),
+        (status = 503, description = "`lingua` is overloaded", body = ErrorBody),
     )
 )]
 async fn detect(
@@ -291,7 +288,7 @@ async fn detect(
 #[utoipa::path(
     get,
     path = "/detect/languages",
-    tag = "Detect",
+    tag = "Detection",
     summary = "List supported languages for detection",
     description = "Every language with the methods that can detect it, sorted by code.",
     responses((status = 200, description = "Supported languages", body = [Language]))
@@ -309,29 +306,29 @@ struct Health {
     status: &'static str,
 }
 
-/// Liveness: whether the process is up.
+/// Liveness probe, whether the process is up.
 #[utoipa::path(
     get,
     path = "/health",
     tag = "Health",
-    summary = "Check that the service is running",
-    description = "Answers `200` as long as the process runs and handles requests. It checks nothing else on purpose: a busy or shutting down service is still alive, and restarting it would not help. Whether it can take requests is `GET /health/ready`.",
-    responses((status = 200, description = "The service is running", body = Health))
+    summary = "Check that the server is running",
+    description = "Liveness probe, busy or shutting down still counts as alive.",
+    responses((status = 200, description = "The server is running", body = Health))
 )]
 async fn health() -> Json<Health> {
     Json(Health { status: "ok" })
 }
 
-/// Readiness: whether the service can take requests.
+/// Readiness probe, whether the server can take requests.
 #[utoipa::path(
     get,
     path = "/health/ready",
     tag = "Health",
-    summary = "Check that the service can take requests",
-    description = "Answers `200` when the service is not shutting down and `mediapipe` detects the language of a fixed English text correctly (about 20 µs). Answers `503` once the service starts shutting down, a few seconds before it stops accepting connections (`SHUTDOWN_DELAY_SECONDS`), so that traffic can move to other instances; requests are still served meanwhile. Load does not affect it: excess `lingua` requests get their own `503`.",
+    summary = "Check that the server can take requests",
+    description = "Readiness probe, server can take requests unless it's shutting down or fails a quick self-check.",
     responses(
-        (status = 200, description = "The service can take requests", body = Health),
-        (status = 503, description = "The service is shutting down or failed its self-check", body = ErrorBody),
+        (status = 200, description = "The server can take requests", body = Health),
+        (status = 503, description = "The server is shutting down or failed its self-check", body = ErrorBody),
     )
 )]
 async fn ready(State(service): State<Service>) -> Result<Json<Health>, ApiError> {

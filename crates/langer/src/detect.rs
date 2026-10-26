@@ -51,7 +51,7 @@ pub struct Detection {
     /// romanized text (`ru-Latn`, `mediapipe` only); `und` when no language is detected.
     #[schema(example = "en")]
     pub language: String,
-    /// Confidence in `0.0..=1.0`; `null` with `und`.
+    /// Confidence in `0.0..=1.0`, `null` with `und`.
     #[schema(example = 0.97)]
     pub confidence: Option<f64>,
     /// Method that produced the result.
