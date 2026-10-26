@@ -19,7 +19,7 @@ divan = { version = "0.1.21", default-features = false }
 flatbuffers = { version = "25.12.19", default-features = false }
 flexbuffers = { version = "25.12.19", default-features = false }
 http-body-util = { version = "0.1.5", default-features = false }
-insta = { version = "1.49.0", default-features = false, features = ["json"] }
+insta = { version = "1.49.0", default-features = false, features = ["json", "redactions"] }
 lingua = { version = "1.8.0", default-features = false }
 metrics = { version = "0.24.6", default-features = false }
 metrics-exporter-prometheus = { version = "0.18.3", default-features = false }

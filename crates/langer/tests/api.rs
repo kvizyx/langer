@@ -239,7 +239,9 @@ async fn openapi_document_is_unchanged() {
     let (status, spec) = get("/schema/openapi.json").await;
     assert_eq!(status, StatusCode::OK);
     let spec: Value = serde_json::from_slice(&spec).expect("spec is JSON");
-    insta::assert_json_snapshot!("openapi", spec);
+
+    // The crate version changes with every release, not with the API.
+    insta::assert_json_snapshot!("openapi", spec, { ".info.version" => "[version]" });
 }
 
 #[tokio::test]
