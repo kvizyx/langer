@@ -1,0 +1,10 @@
+# cargo-release: `cargo release <version> --execute` bumps the workspace version, commits, tags
+# `v<version>` on main and pushes, CI then builds and publishes the images.
+allow-branch = ["main"]
+consolidate-commits = true
+pre-release-commit-message = "chore: release {{version}}"
+tag-name = "v{{version}}"
+tag-message = "Release v{{version}}"
+# The crates are not published to crates.io.
+publish = false
+verify = false
