@@ -14,8 +14,9 @@ COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder
-# CPU level the executable requires, see .cargo/config.toml. RUSTFLAGS replaces the flags set
-# there; dependencies and the service must be built with the same flags, so it is set before cook.
+# CPU level the executable requires: x86-64-v2 (SSE4.2, POPCNT) runs on every x86 CPU since
+# 2009-2011; x86-64-v3 (AVX2, FMA) is 25-40% faster but dies with SIGILL where AVX2 is missing.
+# Dependencies and the service must be built with the same flags, so it is set before cook.
 ARG TARGET_CPU=x86-64-v2
 ENV RUSTFLAGS="-C target-cpu=${TARGET_CPU}"
 COPY --from=planner /src/recipe.json recipe.json
