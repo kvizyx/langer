@@ -70,13 +70,10 @@ fn predict_classifies_texts_without_letters(#[case] text: &str) {
 
 #[test]
 fn predict_with_zero_k_returns_nothing() {
-    assert!(
-        Detector::new()
-            .expect("the bundled model loads")
-            .predict("hello", 0)
-            .expect("prediction succeeds")
-            .is_empty()
-    );
+    let detector = Detector::new().expect("the bundled model loads");
+    let predictions = detector.predict("hello", 0).expect("prediction succeeds");
+
+    assert_eq!(predictions, []);
 }
 
 #[test]
