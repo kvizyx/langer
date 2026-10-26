@@ -1,5 +1,5 @@
 # Rust version of every build: local, CI and the Docker image. Dependabot keeps it up to date.
 [toolchain]
-channel = "1.98.1"
+channel = "1.99.1"
 components = ["clippy", "rustfmt"]
 profile = "minimal"
