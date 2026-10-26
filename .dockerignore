@@ -1,10 +1,10 @@
-# Not needed to build the image: build output, VCS and editor files, docs and tooling configs.
 target
 debug
 .git
 .github
 .idea
+.vscode
 **/*.md
 lefthook.yaml
-deny.toml
+.cargo/deny.toml
 release.toml

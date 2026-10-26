@@ -31,8 +31,8 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - run: cargo test --workspace --locked
 
-  # Advisories, licenses and sources of dependencies, see deny.toml. Separate from `check` and
-  # not required by `image`: a new advisory must not block shipping an unrelated fix.
+  # Advisories, licenses and sources of dependencies, see .cargo/deny.toml. Separate from
+  # `check` and not required by `image`: a new advisory must not block shipping an unrelated fix.
   deny:
     name: Dependencies
     runs-on: ubuntu-latest
