@@ -638,7 +638,7 @@ dependencies = [
  "divan",
  "http-body-util",
  "insta",
- "langer_mediapipe",
+ "langer-mediapipe",
  "lingua",
  "metrics",
  "metrics-exporter-prometheus",
@@ -657,7 +657,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "langer_mediapipe"
+name = "langer-mediapipe"
 version = "0.1.0"
 dependencies = [
  "anyhow",

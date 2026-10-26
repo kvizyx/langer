@@ -5,5 +5,5 @@ debug
 .github
 .idea
 **/*.md
-lefthook.yml
+lefthook.yaml
 deny.toml

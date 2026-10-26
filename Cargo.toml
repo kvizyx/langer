@@ -10,7 +10,7 @@ license = "MIT"
 publish = false
 
 [workspace.dependencies]
-langer_mediapipe = { path = "crates/langer_mediapipe", version = "0.1.0" }
+langer-mediapipe = { path = "crates/langer-mediapipe", version = "0.1.0" }
 
 anyhow = { version = "1.0.104", default-features = false, features = ["std"] }
 axum = { version = "0.8.9", default-features = false }

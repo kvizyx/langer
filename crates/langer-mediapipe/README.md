@@ -1,4 +1,4 @@
-# langer_mediapipe
+# langer-mediapipe
 
 [MediaPipe's language detector](https://ai.google.dev/edge/mediapipe/solutions/text/language_detector)
 in pure Rust: no TFLite runtime, no C++, the ~300 KiB model embedded in the library. It returns
@@ -38,8 +38,8 @@ The labels come from `labels.txt` in the zip archive appended to the model.
 ## Vendored files
 
 Third-party files in `vendor/` are managed with [vendir](https://carvel.dev/vendir/):
-[`vendir.yml`](vendir.yml) pins every file to an exact upstream URL and sha256, and vendir refuses
-a download whose hash differs. [`vendir.lock.yml`](vendir.lock.yml) is written by vendir; commit
+[`vendir.yaml`](vendir.yaml) pins every file to an exact upstream URL and sha256, and vendir refuses
+a download whose hash differs. [`vendir.lock.yaml`](vendir.lock.yaml) is written by vendir; commit
 it with the config. The files are kept unmodified and licensed under the Apache License 2.0
 ([`vendor/license/LICENSE-2.0.txt`](vendor/license/LICENSE-2.0.txt)).
 
@@ -51,7 +51,7 @@ it with the config. The files are kept unmodified and licensed under the Apache 
 | `vendor/license/LICENSE-2.0.txt` | apache.org | — |
 
 - **The model** is the only version Google has published (`float32/latest` serves the same file).
-  It is also a zip archive, so `vendir.yml` disables unpacking for it.
+  It is also a zip archive, so `vendir.yaml` disables unpacking for it.
 - **The character tables** must match the ones the model was built with, not current Unicode;
   upstream has not changed them since 2023. `build.rs` parses the header's arrays into Rust
   constants at build time and checks their shape and order.
@@ -63,7 +63,7 @@ Building and testing need no vendir; only updating vendored files does.
 
 ### Updating
 
-1. Change the file's `url` and `sha256` in `vendir.yml`.
+1. Change the file's `url` and `sha256` in `vendir.yaml`.
 2. Run vendir 0.46 or newer in this directory; it replaces `vendor/` with exactly the configured
    files:
 
@@ -82,7 +82,7 @@ Building and testing need no vendir; only updating vendored files does.
 
 ### Checking
 
-To check that `vendor/` matches `vendir.yml` (e.g. in CI), sync and look for changes:
+To check that `vendor/` matches `vendir.yaml` (e.g. in CI), sync and look for changes:
 
 ```bash
 vendir sync && git diff --exit-code vendor/
@@ -100,5 +100,5 @@ reads uninitialized memory, which cannot be reproduced. Their top language still
 ## Benchmark
 
 ```bash
-cargo bench -p langer_mediapipe
+cargo bench -p langer-mediapipe
 ```

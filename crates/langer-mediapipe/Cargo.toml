@@ -1,5 +1,5 @@
 [package]
-name = "langer_mediapipe"
+name = "langer-mediapipe"
 description = "Pure Rust inference for MediaPipe's text language detector"
 version.workspace = true
 edition.workspace = true

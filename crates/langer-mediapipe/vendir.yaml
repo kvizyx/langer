@@ -1,5 +1,6 @@
 # Third-party files in vendor/, pinned to exact upstream versions and verified by sha256 on
-# download. Run `vendir sync` in this directory after changing it; see README.md.
+# download. Run `vendir sync -f vendir.yaml --lock-file vendir.lock.yaml` in this directory
+# after changing it; see README.md.
 apiVersion: vendir.k14s.io/v1alpha1
 kind: Config
 minimumRequiredVersion: 0.46.0

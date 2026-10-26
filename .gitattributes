@@ -1,6 +1,6 @@
 * text=auto eol=lf
 
 # Vendored third-party files are kept the same, as downloaded by Vendir
-crates/langer_mediapipe/vendor/** -text linguist-vendored
-crates/langer_mediapipe/vendor/**/*.tflite binary
-crates/langer_mediapipe/src/schema_generated.rs linguist-generated
+crates/langer-mediapipe/vendor/** -text linguist-vendored
+crates/langer-mediapipe/vendor/**/*.tflite binary
+crates/langer-mediapipe/src/schema_generated.rs linguist-generated
