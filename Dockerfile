@@ -3,7 +3,7 @@
 # Base images are pinned by digest (of the multi-platform index) for reproducible builds; the tag
 # is kept for readers and update tools. To update, change the tag and take the new digest from
 # `docker buildx imagetools inspect <image:tag>`.
-FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.1-slim-bookworm@sha256:e005be5aebbfe6316c3e679f39a0317bae80175dc75dfb0b2e179f82a7304780 AS chef
+FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.1-slim-bookworm@sha256:2cde8098deabf8414105f7420444a35e44a615ba04e07d3a1fec195ad88d3a1c AS chef
 WORKDIR /src
 # The toolchain in rust-toolchain.toml builds everything, also when it differs from the image's.
 COPY rust-toolchain.toml .
